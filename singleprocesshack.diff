@@ -1,0 +1,491 @@
+diff --git a/battle-engine.js b/battle-engine.js
+index a8d1d27..4cb79c9 100644
+--- a/battle-engine.js
++++ b/battle-engine.js
+@@ -20,9 +20,9 @@ if (!('existsSync' in fs)) {
+ global.config = require('./config/config.js');
+ 
+ // graceful crash - allow current battles to finish before restarting
+-process.on('uncaughtException', function (err) {
++/*process.on('uncaughtException', function (err) {
+ 	require('./crashlogger.js')(err, 'A simulator process');
+-});
++});*/
+ 
+ /**
+  * Converts anything to an ID. An ID must have only lowercase alphanumeric
+@@ -90,7 +90,7 @@ var Battles = {};
+ 
+ // Receive and process a message sent using Simulator.prototype.send in
+ // another process.
+-process.on('message', function(message) {
++battleEngineFakeProcess.client.on('message', function(message) {
+ 	//console.log('CHILD MESSAGE RECV: "'+message+'"');
+ 	var nlIndex = message.indexOf("\n");
+ 	var more = '';
+@@ -111,9 +111,9 @@ process.on('message', function(message) {
+ 
+ 				if (!require('./crashlogger.js')(fakeErr, 'A battle')) {
+ 					var ministack = (""+err.stack).split("\n").slice(0,2).join("<br />");
+-					process.send(data[0]+'\nupdate\n|html|<div class="broadcast-red"><b>A BATTLE PROCESS HAS CRASHED:</b> '+ministack+'</div>');
++					battleEngineFakeProcess.client.send(data[0]+'\nupdate\n|html|<div class="broadcast-red"><b>A BATTLE PROCESS HAS CRASHED:</b> '+ministack+'</div>');
+ 				} else {
+-					process.send(data[0]+'\nupdate\n|html|<div class="broadcast-red"><b>The battle crashed!</b><br />Don\'t worry, we\'re working on fixing it.</div>');
++					battleEngineFakeProcess.client.send(data[0]+'\nupdate\n|html|<div class="broadcast-red"><b>The battle crashed!</b><br />Don\'t worry, we\'re working on fixing it.</div>');
+ 				}
+ 			}
+ 		}
+@@ -3763,7 +3763,7 @@ var Battle = (function() {
+ 	// Simulator.prototype.receive in simulator.js (in another process).
+ 	Battle.prototype.send = function(type, data) {
+ 		if (Array.isArray(data)) data = data.join("\n");
+-		process.send(this.id+"\n"+type+"\n"+data);
++		battleEngineFakeProcess.client.send(this.id+"\n"+type+"\n"+data);
+ 	};
+ 	// This function is called by this process's 'message' event.
+ 	Battle.prototype.receive = function(data, more) {
+diff --git a/commands.js b/commands.js
+index 137da72..6628c9f 100644
+--- a/commands.js
++++ b/commands.js
+@@ -959,11 +959,12 @@ var commands = exports.commands = {
+ 
+ 		} else if (target === 'battles') {
+ 
+-			Simulator.SimulatorProcess.respawn();
+-			return this.sendReply("Battles have been hotpatched. Any battles started after now will use the new code; however, in-progress battles will continue to use the old code.");
++			/*Simulator.SimulatorProcess.respawn();
++			return this.sendReply("Battles have been hotpatched. Any battles started after now will use the new code; however, in-progress battles will continue to use the old code.");*/
++			return this.sendReply("Battle hotpatching is not supported with the single process hack.");
+ 
+ 		} else if (target === 'formats') {
+-			try {
++			/*try {
+ 				// uncache the tools.js dependency tree
+ 				CommandParser.uncacheTree('./tools.js');
+ 				// reload tools.js
+@@ -980,7 +981,8 @@ var commands = exports.commands = {
+ 				return this.sendReply("Formats have been hotpatched.");
+ 			} catch (e) {
+ 				return this.sendReply("Something failed while trying to hotpatch formats: \n" + e.stack);
+-			}
++			}*/
++			return this.sendReply("Formats hotpatching is not supported with the single process hack.");
+ 
+ 		} else if (target === 'learnsets') {
+ 			try {
+@@ -1091,9 +1093,9 @@ var commands = exports.commands = {
+ 			return this.sendReply("Wait for /updateserver to finish before using /kill.");
+ 		}
+ 
+-		for (var i in Sockets.workers) {
++		/*for (var i in Sockets.workers) {
+ 			Sockets.workers[i].kill();
+-		}
++		}*/
+ 
+ 		if (!room.destroyLog) {
+ 			process.exit();
+diff --git a/fake-process.js b/fake-process.js
+new file mode 100644
+index 0000000..bb8ea2a
+--- /dev/null
++++ b/fake-process.js
+@@ -0,0 +1,27 @@
++var EventEmitter = require("events").EventEmitter;
++
++function FakeProcessHelper(input, output) {
++	this.input = input;
++	this.output = output;
++};
++FakeProcessHelper.prototype = {
++	input: null,
++	output: null,
++	on: function (event, callback) {
++		setImmediate(this.input.on.bind(this.input, event, callback));
++		return this;
++	},
++	send: function (message) {
++		setImmediate(this.output.emit.bind(this.output, 'message', message));
++		return this;
++	}
++};
++
++function FakeProcess() {
++	this.serverEmitter = new EventEmitter();
++	this.clientEmitter = new EventEmitter();
++	this.server = new FakeProcessHelper(this.clientEmitter, this.serverEmitter);
++	this.client = new FakeProcessHelper(this.serverEmitter, this.clientEmitter);
++}
++
++exports.FakeProcess = FakeProcess;
+diff --git a/simulator.js b/simulator.js
+index 04eeadf..fde87bb 100644
+--- a/simulator.js
++++ b/simulator.js
+@@ -15,7 +15,8 @@ var simulators = {};
+ 
+ var SimulatorProcess = (function() {
+ 	function SimulatorProcess() {
+-		this.process = require('child_process').fork('battle-engine.js');
++		global.battleEngineFakeProcess = new (require('./fake-process').FakeProcess)();
++		this.process = battleEngineFakeProcess.server; //require('child_process').fork('battle-engine.js');
+ 		this.process.on('message', function(message) {
+ 			var lines = message.split('\n');
+ 			var sim = simulators[lines[0]];
+@@ -24,22 +25,23 @@ var SimulatorProcess = (function() {
+ 			}
+ 		});
+ 		this.send = this.process.send.bind(this.process);
++		setImmediate(require.bind(global, './battle-engine'));
+ 	}
+ 	SimulatorProcess.prototype.load = 0;
+ 	SimulatorProcess.prototype.active = true;
+ 	SimulatorProcess.processes = [];
+ 	SimulatorProcess.spawn = function() {
+-		var num = config.simulatorProcesses || 1;
++		/*var num = config.simulatorProcesses || 1;
+ 		for (var i = 0; i < num; ++i) {
+ 			this.processes.push(new SimulatorProcess());
+-		}
++		}*/
+ 	};
+ 	SimulatorProcess.respawn = function() {
+-		this.processes.splice(0).forEach(function(process) {
++		/*this.processes.splice(0).forEach(function(process) {
+ 			process.active = false;
+ 			if (!process.load) process.process.disconnect();
+ 		});
+-		this.spawn();
++		this.spawn();*/
+ 	};
+ 	SimulatorProcess.acquire = function() {
+ 		var process = this.processes[0];
+@@ -53,9 +55,9 @@ var SimulatorProcess = (function() {
+ 	};
+ 	SimulatorProcess.release = function(process) {
+ 		--process.load;
+-		if (!process.load && !process.active) {
++		/*if (!process.load && !process.active) {
+ 			process.process.disconnect();
+-		}
++		}*/
+ 	};
+ 	SimulatorProcess.eval = function(code) {
+ 		this.processes.forEach(function(process) {
+@@ -66,7 +68,8 @@ var SimulatorProcess = (function() {
+ })();
+ 
+ // Create the initial set of simulator processes.
+-SimulatorProcess.spawn();
++//SimulatorProcess.spawn();
++SimulatorProcess.processes.push(new SimulatorProcess());
+ 
+ var slice = Array.prototype.slice;
+ 
+diff --git a/sockets.js b/sockets.js
+index 7f50f52..1a470aa 100644
+--- a/sockets.js
++++ b/sockets.js
+@@ -11,19 +11,20 @@
+  * @license MIT license
+  */
+ 
+-var cluster = require('cluster');
++//var cluster = require('cluster');
+ var config = require('./config/config');
++var fakeProcess = new (require('./fake-process').FakeProcess)();
+ 
+-if (cluster.isMaster) {
++/*if (cluster.isMaster) {
+ 
+ 	cluster.setupMaster({
+ 		exec: 'sockets.js'
+-	});
++	});*/
+ 
+ 	var workers = exports.workers = {};
+ 
+ 	var spawnWorker = exports.spawnWorker = function() {
+-		var worker = cluster.fork({PSPORT: config.port});
++		var worker = fakeProcess.server; //cluster.fork({PSPORT: config.port});
+ 		var id = worker.id;
+ 		workers[id] = worker;
+ 		worker.on('message', function(data) {
+@@ -49,13 +50,13 @@ if (cluster.isMaster) {
+ 		});
+ 	};
+ 
+-	var workerCount = config.workers || 1;
+-	for (var i=0; i<workerCount; i++) {
++	//var workerCount = config.workers || 1;
++	//for (var i=0; i<workerCount; i++) {
+ 		spawnWorker();
+-	}
++	//}
+ 
+ 	var killWorker = exports.killWorker = function(worker) {
+-		var idd = worker.id+'-';
++		/*var idd = worker.id+'-';
+ 		var count = 0;
+ 		for (var connectionid in Users.connections) {
+ 			if (connectionid.substr(idd.length) === idd) {
+@@ -68,17 +69,18 @@ if (cluster.isMaster) {
+ 			worker.kill();
+ 		} catch (e) {}
+ 		delete workers[worker.id];
+-		return count;
++		return count;*/
++		return 0;
+ 	};
+ 
+ 	var killPid = exports.killPid = function(pid) {
+-		pid = ''+pid;
++		/*pid = ''+pid;
+ 		for (var id in workers) {
+ 			var worker = workers[id];
+ 			if (pid === ''+worker.process.pid) {
+ 				return killWorker(worker);
+ 			}
+-		}
++		}*/
+ 		return false;
+ 	};
+ 
+@@ -104,7 +106,7 @@ if (cluster.isMaster) {
+ 		worker.send('-'+channelid+'\n'+socketid);
+ 	};
+ 
+-} else {
++//} else {
+ 	// is worker
+ 
+ 	if (process.env.PSPORT) config.port = +process.env.PSPORT;
+@@ -125,9 +127,9 @@ if (cluster.isMaster) {
+ 	var Cidr = require('./cidr');
+ 
+ 	// graceful crash
+-	process.on('uncaughtException', function(err) {
++	/*process.on('uncaughtException', function(err) {
+ 		require('./crashlogger.js')(err, 'Socket process '+cluster.worker.id+' ('+process.pid+')');
+-	});
++	});*/
+ 
+ 	var app = require('http').createServer();
+ 	var appssl;
+@@ -225,7 +227,7 @@ if (cluster.isMaster) {
+ 		);
+ 	}
+ 
+-	process.on('message', function(data) {
++	fakeProcess.client.on('message', function(data) {
+ 		// console.log('worker received: '+data);
+ 		var socket = null;
+ 		var socketid = null;
+@@ -323,7 +325,7 @@ if (cluster.isMaster) {
+ 			}
+ 		}
+ 
+-		process.send('*'+socketid+'\n'+socket.remoteAddress);
++		fakeProcess.client.send('*'+socketid+'\n'+socket.remoteAddress);
+ 
+ 		// console.log('CONNECT: '+socket.remoteAddress+' ['+socket.id+']');
+ 		var interval;
+@@ -337,14 +339,14 @@ if (cluster.isMaster) {
+ 		}
+ 
+ 		socket.on('data', function(message) {
+-			process.send('<'+socketid+'\n'+message);
++			fakeProcess.client.send('<'+socketid+'\n'+message);
+ 		});
+ 
+ 		socket.on('close', function() {
+ 			if (interval) {
+ 				clearInterval(interval);
+ 			}
+-			process.send('!'+socketid);
++			fakeProcess.client.send('!'+socketid);
+ 
+ 			delete sockets[socketid];
+ 			for (channelid in channels) {
+@@ -354,14 +356,14 @@ if (cluster.isMaster) {
+ 	});
+ 	server.installHandlers(app, {});
+ 	app.listen(config.port);
+-	console.log('Worker '+cluster.worker.id+' now listening on port ' + config.port);
++	console.log('Worker '/*+cluster.worker.id*/+' now listening on port ' + config.port);
+ 
+ 	if (appssl) {
+ 		server.installHandlers(appssl, {});
+ 		appssl.listen(config.ssl.port);
+-		console.log('Worker '+cluster.worker.id+' now listening for SSL on port ' + config.ssl.port);
++		console.log('Worker '/*+cluster.worker.id*/+' now listening for SSL on port ' + config.ssl.port);
+ 	}
+ 
+ 	console.log('Test your server at http://localhost:' + config.port);
+ 
+-}
++//}
+diff --git a/team-validator.js b/team-validator.js
+index 337ee81..3a25ca7 100644
+--- a/team-validator.js
++++ b/team-validator.js
+@@ -7,7 +7,7 @@
+  * @license MIT license
+  */
+ 
+-if (!process.send) {
++/*if (!process.send) {
+ 	var validationCount = 0;
+ 	var pendingValidations = {};
+ 
+@@ -77,10 +77,19 @@ if (!process.send) {
+ 	ValidatorProcess.spawn();
+ 
+ 	exports.ValidatorProcess = ValidatorProcess;
+-	exports.pendingValidations = pendingValidations;
++	exports.pendingValidations = pendingValidations;*/
+ 
+ 	exports.validateTeam = function(format, team, callback) {
+-		ValidatorProcess.send(format, team, callback);
++		var parsedTeam = Tools.fastUnpackTeam(team);
++		var problems = this.validateTeamSync(format, parsedTeam);
++		if (problems && problems.length)
++			setImmediate(callback.bind(null, false, problems.join('\n')));
++		else {
++			var packedTeam = Tools.packTeam(parsedTeam);
++			if (packedTeam === team)
++				packedTeam = '';
++			setImmediate(callback.bind(null, true, packedTeam));
++		}
+ 	};
+ 
+ 	var synchronousValidators = {};
+@@ -96,14 +105,14 @@ if (!process.send) {
+ 		if (!synchronousValidators[format]) synchronousValidators[format] = new Validator(format);
+ 		return synchronousValidators[format].checkLearnset(move, template, lsetData);
+ 	};
+-} else {
++/*} else {
+ 	require('sugar');
+ 	global.fs = require('fs');
+ 	global.config = require('./config/config.js');
+ 
+ 	process.on('uncaughtException', function (err) {
+ 		require('./crashlogger.js')(err, 'A team validator process');
+-	});
++	});*/
+ 
+ 	/**
+ 	 * Converts anything to an ID. An ID must have only lowercase alphanumeric
+@@ -113,18 +122,18 @@ if (!process.send) {
+ 	 * If an object with an ID is passed, its ID will be returned.
+ 	 * Otherwise, an empty string will be returned.
+ 	 */
+-	global.toId = function(text) {
++	/*global.toId = function(text) {
+ 		if (text && text.id) text = text.id;
+ 		else if (text && text.userid) text = text.userid;
+ 
+ 		return string(text).toLowerCase().replace(/[^a-z0-9]+/g, '');
+ 	};
+-	global.toUserid = toId;
++	global.toUserid = toId;*/
+ 
+ 	/**
+ 	 * Validates a username or Pokemon nickname
+ 	 */
+-	var bannedNameStartChars = {'~':1, '&':1, '@':1, '%':1, '+':1, '-':1, '!':1, '?':1, '#':1, ' ':1};
++	/*var bannedNameStartChars = {'~':1, '&':1, '@':1, '%':1, '+':1, '-':1, '!':1, '?':1, '#':1, ' ':1};
+ 	global.toName = function(name) {
+ 		name = string(name);
+ 		name = name.replace(/[\|\s\[\]\,]+/g, ' ').trim();
+@@ -136,7 +145,7 @@ if (!process.send) {
+ 			name = config.nameFilter(name);
+ 		}
+ 		return name.trim();
+-	};
++	};*/
+ 
+ 	/**
+ 	 * Safely ensures the passed variable is a string
+@@ -144,7 +153,7 @@ if (!process.send) {
+ 	 * If we're expecting a string and being given anything that isn't a string
+ 	 * or a number, it's safe to assume it's an error, and return ''
+ 	 */
+-	global.string = function(str) {
++	/*global.string = function(str) {
+ 		if (typeof str === 'string' || typeof str === 'number') return ''+str;
+ 		return '';
+ 	};
+@@ -184,7 +193,7 @@ if (!process.send) {
+ 			respond(id, true, packedTeam);
+ 		}
+ 	});
+-}
++}*/
+ 
+ var Validator = (function() {
+ 	function Validator(format) {
+diff --git a/verifier.js b/verifier.js
+index 4ff416e..6636b84 100644
+--- a/verifier.js
++++ b/verifier.js
+@@ -14,7 +14,8 @@
+ 
+ // Because I don't want two files, we're going to fork ourselves.
+ 
+-if (!process.send) {
++var fakeProcess = new (require('./fake-process').FakeProcess)();
++//if (!process.send) {
+ 
+ 	// This is the parent
+ 
+@@ -22,14 +23,14 @@ if (!process.send) {
+ 	var callbacks = {};
+ 	var callbackData = {};
+ 
+-	var child = require('child_process').fork('verifier.js');
++	//var child = require('child_process').fork('verifier.js');
+ 	exports.verify = function(data, signature, callback) {
+ 		var localGuid = guid++;
+ 		callbacks[localGuid] = callback;
+ 		callbackData[localGuid] = data;
+-		child.send({data: data, sig: signature, guid: localGuid});
++		fakeProcess.server.send({data: data, sig: signature, guid: localGuid});
+ 	};
+-	child.on('message', function(response) {
++	fakeProcess.server.on('message', function(response) {
+ 		if (callbacks[response.guid]) {
+ 			callbacks[response.guid](response.success, callbackData[response.guid]);
+ 			delete callbacks[response.guid];
+@@ -37,7 +38,7 @@ if (!process.send) {
+ 		}
+ 	});
+ 
+-} else {
++//} else {
+ 
+ 	// This is the child
+ 
+@@ -47,17 +48,17 @@ if (!process.send) {
+ 	var keyalgo = config.loginServer.keyAlgorithm;
+ 	var pkey = config.loginServer.publicKey;
+ 
+-	process.on('message', function(message) {
++	fakeProcess.client.on('message', function(message) {
+ 		var verifier = crypto.createVerify(keyalgo);
+ 		verifier.update(message.data);
+ 		var success = false;
+ 		try {
+ 			success = verifier.verify(pkey, message.sig, 'hex');
+ 		} catch (e) {}
+-		process.send({
++		fakeProcess.client.send({
+ 			success: success,
+ 			guid: message.guid
+ 		});
+ 	});
+ 
+-}
++//}

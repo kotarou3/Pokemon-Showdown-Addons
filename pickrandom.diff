@@ -1,0 +1,21 @@
+diff --git a/config/commands.js b/config/commands.js
+index bb495a5..a25be3a 100644
+--- a/config/commands.js
++++ b/config/commands.js
+@@ -1010,6 +1010,16 @@ var commands = exports.commands = {
+ 	},
+ 
+ 	/*********************************************************
++	 * Custom commands
++	 *********************************************************/
++
++	pr: 'pickrandom',
++	pickrandom: function(target, room, user) {
++		if (!this.canBroadcast()) return false;
++		return this.sendReply(target.split(',').map(function (s) { return s.trim(); }).randomize()[0]);
++	},
++
++	/*********************************************************
+ 	 * Help commands
+ 	 *********************************************************/
+ 
