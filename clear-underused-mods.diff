@@ -1,9 +1,9 @@
 diff --git a/config/formats.js b/config/formats.js
-index c010341..932e14f 100644
+index a73b7d7..3a5d9e4 100644
 --- a/config/formats.js
 +++ b/config/formats.js
-@@ -563,15 +563,6 @@ exports.Formats = [
- 		banlist: ['Soul Dew', 'Thick Club', 'Deepseatooth', 'Deepseascale', 'Light Ball', 'Mawilite', 'Medichamite', 'Eviolite', 'Shedinja', 'Smeargle', 'Huge Power', 'Pure Power']
+@@ -535,15 +535,6 @@ exports.Formats = [
+ 		}
  	},
  	{
 -		name: "Gen-NEXT OU",
@@ -18,7 +18,7 @@ index c010341..932e14f 100644
  		name: "[Gen 5] Glitchmons",
  		section: "Other Metagames",
  
-@@ -733,110 +724,6 @@ exports.Formats = [
+@@ -705,110 +696,6 @@ exports.Formats = [
  		defaultLevel: 100,
  		// no restrictions, for serious (other than team preview)
  		ruleset: ['Team Preview']
@@ -13008,10 +13008,10 @@ index c8281ec..0000000
 -};
 diff --git a/mods/gen4/items.js b/mods/gen4/items.js
 deleted file mode 100644
-index c15c5f7..0000000
+index a2addc5..0000000
 --- a/mods/gen4/items.js
 +++ /dev/null
-@@ -1,122 +0,0 @@
+@@ -1,123 +0,0 @@
 -exports.BattleItems = {
 -	"choiceband": {
 -		inherit: true,
@@ -13070,7 +13070,8 @@ index c15c5f7..0000000
 -		inherit: true,
 -		onModifyPokemon: function(pokemon) {
 -			pokemon.negateImmunity['Ground'] = true;
--		}
+-		},
+-		desc: "Holder's Speed is halved and it becomes grounded."
 -	},
 -	"lifeorb": {
 -		id: "lifeorb",
@@ -13136,10 +13137,10 @@ index c15c5f7..0000000
 -};
 diff --git a/mods/gen4/moves.js b/mods/gen4/moves.js
 deleted file mode 100644
-index af1f181..0000000
+index bdc6372..0000000
 --- a/mods/gen4/moves.js
 +++ /dev/null
-@@ -1,986 +0,0 @@
+@@ -1,1018 +0,0 @@
 -function clampIntRange(num, min, max) {
 -	num = Math.floor(num);
 -	if (num < min) num = min;
@@ -13204,8 +13205,40 @@ index af1f181..0000000
 -	beatup: {
 -		inherit: true,
 -		basePower: 10,
--		basePowerCallback: undefined,
--		desc: "Does one hit for the user and each other unfainted non-egg active and non-active Pokemon on the user's side without a status problem."
+-		basePowerCallback: null,
+-		desc: "Does one hit for the user and each other unfainted non-egg active and non-active Pokemon on the user's side without a status problem.",
+-		onBasePower: function(basePower, pokemon, target) {
+-			pokemon.addVolatile('beatup');
+-		},
+-		effect: {
+-			duration: 1,
+-			onStart: function(pokemon) {
+-				this.effectData.index = 0;
+-				while (pokemon.side.pokemon[this.effectData.index] !== pokemon &&
+-					(!pokemon.side.pokemon[this.effectData.index] ||
+-					pokemon.side.pokemon[this.effectData.index].fainted ||
+-					pokemon.side.pokemon[this.effectData.index].status)) {
+-					this.effectData.index++;
+-				}
+-			},
+-			onRestart: function(pokemon) {
+-				do {
+-					this.effectData.index++;
+-					if (this.effectData.index >= 6) break;
+-				} while (!pokemon.side.pokemon[this.effectData.index] ||
+-						pokemon.side.pokemon[this.effectData.index].fainted ||
+-						pokemon.side.pokemon[this.effectData.index].status);
+-			},
+-			onModifyAtkPriority: 5,
+-			onModifyAtk: function(atk, pokemon) {
+-				this.add("-message", pokemon.side.pokemon[this.effectData.index].name + "'s attack!");
+-				return pokemon.side.pokemon[this.effectData.index].template.baseStats.atk;
+-			},
+-			onFoeModifyDefPriority: 5,
+-			onFoeModifyDef: function(def, pokemon) {
+-				return pokemon.template.baseStats.def;
+-			}
+-		}
 -	},
 -	bide: {
 -		inherit: true,
@@ -19550,10 +19583,10 @@ index 434835f..0000000
 -};
 diff --git a/mods/gennext/README.md b/mods/gennext/README.md
 deleted file mode 100644
-index 19f0573..0000000
+index f8086e0..0000000
 --- a/mods/gennext/README.md
 +++ /dev/null
-@@ -1,492 +0,0 @@
+@@ -1,491 +0,0 @@
 -Generation NEXT!
 -========================================================================
 -
@@ -19609,9 +19642,8 @@ index 19f0573..0000000
 -  now grants +1 SpD +1 Spe +1 accuracy.
 -
 -- Drives will change Genesect's typing immediately after switch-in, to Bug/Ice,
--  Bug/Fire, Bug/Electric, or Bug/Water (basically, it will change Genesect's
--  type, except Genesect will still take neutral damage from SR). However,
--  Download will not activate unless Genesect holds a Drive.
+-  Bug/Fire, Bug/Electric, or Bug/Water. However, Download will not activate
+-  unless Genesect holds a Drive.
 -
 -- Unown gets an item named Strange Orb (select "Stick" in the teambuilder)
 -  It doubles its SpA, SpD, and Spe, and changes its type to the type of its
@@ -20666,7 +20698,7 @@ index ad481e5..0000000
 -};
 diff --git a/mods/gennext/items.js b/mods/gennext/items.js
 deleted file mode 100644
-index d437c0e..0000000
+index 06ba1e5..0000000
 --- a/mods/gennext/items.js
 +++ /dev/null
 @@ -1,237 +0,0 @@
@@ -20883,7 +20915,7 @@ index d437c0e..0000000
 -			}
 -		},
 -		onFoeBasePower: function(basePower, attacker, defender, move) {
--			var GossamerWingUsers = {"Butterfree":1, "Masquerain":1, "Beautifly":1, "Mothim":1, "Lilligant":1};
+-			var GossamerWingUsers = {"Butterfree":1, "Masquerain":1, "Beautifly":1, "Mothim":1, "Lilligant":1, "Vivillon":1};
 -			if (GossamerWingUsers[defender.template.species]) {
 -				if (move.type === 'Rock' || move.type === 'Electric' || move.type === 'Ice') {
 -					this.add('-message', "The attack was weakened by GoassamerWing!");
@@ -20892,7 +20924,7 @@ index d437c0e..0000000
 -			}
 -		},
 -		onDamage: function(damage, defender, attacker, effect) {
--			var GossamerWingUsers = {"Butterfree":1, "Masquerain":1, "Beautifly":1, "Mothim":1};
+-			var GossamerWingUsers = {"Butterfree":1, "Masquerain":1, "Beautifly":1, "Mothim":1, "Vivillon":1};
 -			if (GossamerWingUsers[defender.template.species]) {
 -				if (effect && effect.id === 'stealthrock') {
 -					return damage / 2;
@@ -20909,7 +20941,7 @@ index d437c0e..0000000
 -};
 diff --git a/mods/gennext/moves.js b/mods/gennext/moves.js
 deleted file mode 100644
-index 7c0fa2d..0000000
+index ba40a13..0000000
 --- a/mods/gennext/moves.js
 +++ /dev/null
 @@ -1,1728 +0,0 @@
@@ -21626,7 +21658,7 @@ index 7c0fa2d..0000000
 -			accuracy: 1
 -		},
 -		onModifyMove: function(move, user) {
--			var GossamerWingUsers = {"Butterfree":1, "Masquerain":1, "Beautifly":1, "Mothim":1, "Lilligant":1};
+-			var GossamerWingUsers = {"Butterfree":1, "Masquerain":1, "Beautifly":1, "Mothim":1, "Lilligant":1, "Vivillon":1};
 -			if (user.item === 'stick' && GossamerWingUsers[user.template.species]) {
 -				move.boosts = {
 -					spa: 1,
