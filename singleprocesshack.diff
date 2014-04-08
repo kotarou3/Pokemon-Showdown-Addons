@@ -1,5 +1,5 @@
 diff --git a/battle-engine.js b/battle-engine.js
-index a8d1d27..4cb79c9 100644
+index 21f2c99..4777729 100644
 --- a/battle-engine.js
 +++ b/battle-engine.js
 @@ -20,9 +20,9 @@ if (!('existsSync' in fs)) {
@@ -35,7 +35,7 @@ index a8d1d27..4cb79c9 100644
  				}
  			}
  		}
-@@ -3763,7 +3763,7 @@ var Battle = (function() {
+@@ -3766,7 +3766,7 @@ var Battle = (function() {
  	// Simulator.prototype.receive in simulator.js (in another process).
  	Battle.prototype.send = function(type, data) {
  		if (Array.isArray(data)) data = data.join("\n");
@@ -45,10 +45,10 @@ index a8d1d27..4cb79c9 100644
  	// This function is called by this process's 'message' event.
  	Battle.prototype.receive = function(data, more) {
 diff --git a/commands.js b/commands.js
-index 137da72..6628c9f 100644
+index 37185b7..d2e6dd5 100644
 --- a/commands.js
 +++ b/commands.js
-@@ -959,11 +959,12 @@ var commands = exports.commands = {
+@@ -977,11 +977,12 @@ var commands = exports.commands = {
  
  		} else if (target === 'battles') {
  
@@ -64,7 +64,7 @@ index 137da72..6628c9f 100644
  				// uncache the tools.js dependency tree
  				CommandParser.uncacheTree('./tools.js');
  				// reload tools.js
-@@ -980,7 +981,8 @@ var commands = exports.commands = {
+@@ -998,7 +999,8 @@ var commands = exports.commands = {
  				return this.sendReply("Formats have been hotpatched.");
  			} catch (e) {
  				return this.sendReply("Something failed while trying to hotpatch formats: \n" + e.stack);
@@ -74,7 +74,7 @@ index 137da72..6628c9f 100644
  
  		} else if (target === 'learnsets') {
  			try {
-@@ -1091,9 +1093,9 @@ var commands = exports.commands = {
+@@ -1109,9 +1111,9 @@ var commands = exports.commands = {
  			return this.sendReply("Wait for /updateserver to finish before using /kill.");
  		}
  
@@ -120,7 +120,7 @@ index 0000000..bb8ea2a
 +
 +exports.FakeProcess = FakeProcess;
 diff --git a/simulator.js b/simulator.js
-index 04eeadf..fde87bb 100644
+index d0bf0fa..7234e47 100644
 --- a/simulator.js
 +++ b/simulator.js
 @@ -15,7 +15,8 @@ var simulators = {};
@@ -184,7 +184,7 @@ index 04eeadf..fde87bb 100644
  var slice = Array.prototype.slice;
  
 diff --git a/sockets.js b/sockets.js
-index 7f50f52..1a470aa 100644
+index fba8446..1733398 100644
 --- a/sockets.js
 +++ b/sockets.js
 @@ -11,19 +11,20 @@
@@ -291,10 +291,10 @@ index 7f50f52..1a470aa 100644
  
  		// console.log('CONNECT: '+socket.remoteAddress+' ['+socket.id+']');
  		var interval;
-@@ -337,14 +339,14 @@ if (cluster.isMaster) {
- 		}
- 
- 		socket.on('data', function(message) {
+@@ -344,14 +346,14 @@ if (cluster.isMaster) {
+ 			if (pipeIndex < 0 || pipeIndex === message.length-1) return;
+ 			// drop legacy JSON messages
+ 			if (message.charAt(0) === '{') return;
 -			process.send('<'+socketid+'\n'+message);
 +			fakeProcess.client.send('<'+socketid+'\n'+message);
  		});
@@ -308,7 +308,7 @@ index 7f50f52..1a470aa 100644
  
  			delete sockets[socketid];
  			for (channelid in channels) {
-@@ -354,14 +356,14 @@ if (cluster.isMaster) {
+@@ -361,14 +363,14 @@ if (cluster.isMaster) {
  	});
  	server.installHandlers(app, {});
  	app.listen(config.port);
@@ -327,7 +327,7 @@ index 7f50f52..1a470aa 100644
 -}
 +//}
 diff --git a/team-validator.js b/team-validator.js
-index 337ee81..3a25ca7 100644
+index a24e6de..02a8119 100644
 --- a/team-validator.js
 +++ b/team-validator.js
 @@ -7,7 +7,7 @@
