@@ -1,8 +1,8 @@
 diff --git a/config/commands.js b/config/commands.js
-index bb495a5..e6ddbed 100644
+index 3a7f807..76b17e7 100644
 --- a/config/commands.js
 +++ b/config/commands.js
-@@ -1010,6 +1010,38 @@ var commands = exports.commands = {
+@@ -1074,6 +1074,38 @@ var commands = exports.commands = {
  	},
  
  	/*********************************************************
@@ -12,11 +12,11 @@ index bb495a5..e6ddbed 100644
 +	hide: 'hideauth',
 +	hideauth: function(target, room, user) {
 +		if (!this.can('hideauth')) return false;
-+		target = target || config.groupsranking[0];
-+		if (!config.groups[target]) {
-+			target = config.groupsranking[0];
++		target = target || config.groups.default.global;
++		if (!config.groups.global[target]) {
++			target = config.groups.default.global;
 +			this.sendReply("You have picked an invalid group, defaulting to '" + target + "'.");
-+		} else if (config.groups[target].rank >= config.groups[user.group].rank)
++		} else if (config.groups.bySymbol[target].globalRank >= config.groups.bySymbol[user.group].globalRank)
 +			return this.sendReply("The group you have chosen is either your current group OR one of higher rank. You cannot hide like that.");
 +
 +		user.getIdentity = function (roomid) {
