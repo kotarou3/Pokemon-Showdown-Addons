@@ -1,9 +1,9 @@
 diff --git a/battle-engine.js b/battle-engine.js
-index 21f2c99..4777729 100644
+index de5482a..f0fa1bc 100644
 --- a/battle-engine.js
 +++ b/battle-engine.js
 @@ -20,9 +20,9 @@ if (!('existsSync' in fs)) {
- global.config = require('./config/config.js');
+ global.Config = require('./config/config.js');
  
  // graceful crash - allow current battles to finish before restarting
 -process.on('uncaughtException', function (err) {
@@ -35,7 +35,7 @@ index 21f2c99..4777729 100644
  				}
  			}
  		}
-@@ -3766,7 +3766,7 @@ var Battle = (function() {
+@@ -3782,7 +3782,7 @@ var Battle = (function() {
  	// Simulator.prototype.receive in simulator.js (in another process).
  	Battle.prototype.send = function(type, data) {
  		if (Array.isArray(data)) data = data.join("\n");
@@ -45,10 +45,10 @@ index 21f2c99..4777729 100644
  	// This function is called by this process's 'message' event.
  	Battle.prototype.receive = function(data, more) {
 diff --git a/commands.js b/commands.js
-index 37185b7..d2e6dd5 100644
+index 837c744..5c9a74a 100644
 --- a/commands.js
 +++ b/commands.js
-@@ -977,11 +977,12 @@ var commands = exports.commands = {
+@@ -1004,11 +1004,12 @@ var commands = exports.commands = {
  
  		} else if (target === 'battles') {
  
@@ -64,7 +64,7 @@ index 37185b7..d2e6dd5 100644
  				// uncache the tools.js dependency tree
  				CommandParser.uncacheTree('./tools.js');
  				// reload tools.js
-@@ -998,7 +999,8 @@ var commands = exports.commands = {
+@@ -1025,7 +1026,8 @@ var commands = exports.commands = {
  				return this.sendReply("Formats have been hotpatched.");
  			} catch (e) {
  				return this.sendReply("Something failed while trying to hotpatch formats: \n" + e.stack);
@@ -74,7 +74,7 @@ index 37185b7..d2e6dd5 100644
  
  		} else if (target === 'learnsets') {
  			try {
-@@ -1109,9 +1111,9 @@ var commands = exports.commands = {
+@@ -1136,9 +1138,9 @@ var commands = exports.commands = {
  			return this.sendReply("Wait for /updateserver to finish before using /kill.");
  		}
  
@@ -86,41 +86,8 @@ index 37185b7..d2e6dd5 100644
  
  		if (!room.destroyLog) {
  			process.exit();
-diff --git a/fake-process.js b/fake-process.js
-new file mode 100644
-index 0000000..bb8ea2a
---- /dev/null
-+++ b/fake-process.js
-@@ -0,0 +1,27 @@
-+var EventEmitter = require("events").EventEmitter;
-+
-+function FakeProcessHelper(input, output) {
-+	this.input = input;
-+	this.output = output;
-+};
-+FakeProcessHelper.prototype = {
-+	input: null,
-+	output: null,
-+	on: function (event, callback) {
-+		setImmediate(this.input.on.bind(this.input, event, callback));
-+		return this;
-+	},
-+	send: function (message) {
-+		setImmediate(this.output.emit.bind(this.output, 'message', message));
-+		return this;
-+	}
-+};
-+
-+function FakeProcess() {
-+	this.serverEmitter = new EventEmitter();
-+	this.clientEmitter = new EventEmitter();
-+	this.server = new FakeProcessHelper(this.clientEmitter, this.serverEmitter);
-+	this.client = new FakeProcessHelper(this.serverEmitter, this.clientEmitter);
-+}
-+
-+exports.FakeProcess = FakeProcess;
 diff --git a/simulator.js b/simulator.js
-index d0bf0fa..7234e47 100644
+index 16334a4..c00f900 100644
 --- a/simulator.js
 +++ b/simulator.js
 @@ -15,7 +15,8 @@ var simulators = {};
@@ -142,10 +109,10 @@ index d0bf0fa..7234e47 100644
  	SimulatorProcess.prototype.load = 0;
  	SimulatorProcess.prototype.active = true;
  	SimulatorProcess.processes = [];
- 	SimulatorProcess.spawn = function() {
--		var num = config.simulatorProcesses || 1;
-+		/*var num = config.simulatorProcesses || 1;
- 		for (var i = 0; i < num; ++i) {
+ 	SimulatorProcess.spawn = function(num) {
+-		if (!num) num = Config.simulatorProcesses || 1;
++		/*if (!num) num = Config.simulatorProcesses || 1;
+ 		for (var i = this.processes.length; i < num; ++i) {
  			this.processes.push(new SimulatorProcess());
 -		}
 +		}*/
@@ -184,7 +151,7 @@ index d0bf0fa..7234e47 100644
  var slice = Array.prototype.slice;
  
 diff --git a/sockets.js b/sockets.js
-index fba8446..1733398 100644
+index 9e0bdc3..3a32237 100644
 --- a/sockets.js
 +++ b/sockets.js
 @@ -11,19 +11,20 @@
@@ -193,7 +160,7 @@ index fba8446..1733398 100644
  
 -var cluster = require('cluster');
 +//var cluster = require('cluster');
- var config = require('./config/config');
+ var Config = require('./config/config');
 +var fakeProcess = new (require('./fake-process').FakeProcess)();
  
 -if (cluster.isMaster) {
@@ -207,8 +174,8 @@ index fba8446..1733398 100644
  	var workers = exports.workers = {};
  
  	var spawnWorker = exports.spawnWorker = function() {
--		var worker = cluster.fork({PSPORT: config.port});
-+		var worker = fakeProcess.server; //cluster.fork({PSPORT: config.port});
+-		var worker = cluster.fork({PSPORT: Config.port});
++		var worker = fakeProcess.server; //cluster.fork({PSPORT: Config.port});
  		var id = worker.id;
  		workers[id] = worker;
  		worker.on('message', function(data) {
@@ -216,9 +183,9 @@ index fba8446..1733398 100644
  		});
  	};
  
--	var workerCount = config.workers || 1;
+-	var workerCount = Config.workers || 1;
 -	for (var i=0; i<workerCount; i++) {
-+	//var workerCount = config.workers || 1;
++	//var workerCount = Config.workers || 1;
 +	//for (var i=0; i<workerCount; i++) {
  		spawnWorker();
 -	}
@@ -260,7 +227,7 @@ index fba8446..1733398 100644
 +//} else {
  	// is worker
  
- 	if (process.env.PSPORT) config.port = +process.env.PSPORT;
+ 	if (process.env.PSPORT) Config.port = +process.env.PSPORT;
 @@ -125,9 +127,9 @@ if (cluster.isMaster) {
  	var Cidr = require('./cidr');
  
@@ -273,8 +240,8 @@ index fba8446..1733398 100644
  
  	var app = require('http').createServer();
  	var appssl;
-@@ -225,7 +227,7 @@ if (cluster.isMaster) {
- 		);
+@@ -218,7 +220,7 @@ if (cluster.isMaster) {
+ 		interval = setInterval(sweepClosedSockets, 1000*60*10);
  	}
  
 -	process.on('message', function(data) {
@@ -282,7 +249,7 @@ index fba8446..1733398 100644
  		// console.log('worker received: '+data);
  		var socket = null;
  		var socketid = null;
-@@ -323,7 +325,7 @@ if (cluster.isMaster) {
+@@ -316,7 +318,7 @@ if (cluster.isMaster) {
  			}
  		}
  
@@ -291,7 +258,7 @@ index fba8446..1733398 100644
  
  		// console.log('CONNECT: '+socket.remoteAddress+' ['+socket.id+']');
  		var interval;
-@@ -344,14 +346,14 @@ if (cluster.isMaster) {
+@@ -337,14 +339,14 @@ if (cluster.isMaster) {
  			if (pipeIndex < 0 || pipeIndex === message.length-1) return;
  			// drop legacy JSON messages
  			if (message.charAt(0) === '{') return;
@@ -307,27 +274,27 @@ index fba8446..1733398 100644
 +			fakeProcess.client.send('!'+socketid);
  
  			delete sockets[socketid];
- 			for (channelid in channels) {
-@@ -361,14 +363,14 @@ if (cluster.isMaster) {
+ 			for (var channelid in channels) {
+@@ -354,14 +356,14 @@ if (cluster.isMaster) {
  	});
  	server.installHandlers(app, {});
- 	app.listen(config.port);
--	console.log('Worker '+cluster.worker.id+' now listening on port ' + config.port);
-+	console.log('Worker '/*+cluster.worker.id*/+' now listening on port ' + config.port);
+ 	app.listen(Config.port);
+-	console.log('Worker '+cluster.worker.id+' now listening on port ' + Config.port);
++	console.log('Worker '/*+cluster.worker.id*/+' now listening on port ' + Config.port);
  
  	if (appssl) {
  		server.installHandlers(appssl, {});
- 		appssl.listen(config.ssl.port);
--		console.log('Worker '+cluster.worker.id+' now listening for SSL on port ' + config.ssl.port);
-+		console.log('Worker '/*+cluster.worker.id*/+' now listening for SSL on port ' + config.ssl.port);
+ 		appssl.listen(Config.ssl.port);
+-		console.log('Worker '+cluster.worker.id+' now listening for SSL on port ' + Config.ssl.port);
++		console.log('Worker '/*+cluster.worker.id*/+' now listening for SSL on port ' + Config.ssl.port);
  	}
  
- 	console.log('Test your server at http://localhost:' + config.port);
+ 	console.log('Test your server at http://localhost:' + Config.port);
  
 -}
 +//}
 diff --git a/team-validator.js b/team-validator.js
-index a24e6de..02a8119 100644
+index 249b7fe..649d48a 100644
 --- a/team-validator.js
 +++ b/team-validator.js
 @@ -7,7 +7,7 @@
@@ -369,7 +336,7 @@ index a24e6de..02a8119 100644
 +/*} else {
  	require('sugar');
  	global.fs = require('fs');
- 	global.config = require('./config/config.js');
+ 	global.Config = require('./config/config.js');
  
  	process.on('uncaughtException', function (err) {
  		require('./crashlogger.js')(err, 'A team validator process');
@@ -401,7 +368,7 @@ index a24e6de..02a8119 100644
  		name = string(name);
  		name = name.replace(/[\|\s\[\]\,]+/g, ' ').trim();
 @@ -136,7 +145,7 @@ if (!process.send) {
- 			name = config.nameFilter(name);
+ 			name = Config.nameFilter(name);
  		}
  		return name.trim();
 -	};
@@ -418,7 +385,7 @@ index a24e6de..02a8119 100644
  		if (typeof str === 'string' || typeof str === 'number') return ''+str;
  		return '';
  	};
-@@ -184,7 +193,7 @@ if (!process.send) {
+@@ -179,7 +188,7 @@ if (!process.send) {
  			respond(id, true, packedTeam);
  		}
  	});
@@ -428,7 +395,7 @@ index a24e6de..02a8119 100644
  var Validator = (function() {
  	function Validator(format) {
 diff --git a/verifier.js b/verifier.js
-index 4ff416e..6636b84 100644
+index d61f0f0..4fec4a9 100644
 --- a/verifier.js
 +++ b/verifier.js
 @@ -14,7 +14,8 @@
@@ -469,8 +436,8 @@ index 4ff416e..6636b84 100644
  	// This is the child
  
 @@ -47,17 +48,17 @@ if (!process.send) {
- 	var keyalgo = config.loginServer.keyAlgorithm;
- 	var pkey = config.loginServer.publicKey;
+ 	var keyalgo = Config.loginServer.keyAlgorithm;
+ 	var pkey = Config.loginServer.publicKey;
  
 -	process.on('message', function(message) {
 +	fakeProcess.client.on('message', function(message) {

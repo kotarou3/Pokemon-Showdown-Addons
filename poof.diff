@@ -17,7 +17,7 @@ index 8c20f90..8b34b5c 100644
 +		];
 +
 +		return function(target, room, user) {
-+			if (config.poofOff) return this.sendReply("Poof is currently disabled.");
++			if (Config.poofOff) return this.sendReply("Poof is currently disabled.");
 +			if (target && !this.can('broadcast')) return false;
 +			if (room.id !== 'lobby') return false;
 +			var message = target || messages[Math.floor(Math.random() * messages.length)];
@@ -39,13 +39,13 @@ index 8c20f90..8b34b5c 100644
 +	poofoff: 'nopoof',
 +	nopoof: function() {
 +		if (!this.can('poofoff')) return false;
-+		config.poofOff = true;
++		Config.poofOff = true;
 +		return this.sendReply("Poof is now disabled.");
 +	},
 +
 +	poofon: function() {
 +		if (!this.can('poofoff')) return false;
-+		config.poofOff = false;
++		Config.poofOff = false;
 +		return this.sendReply("Poof is now enabled.");
 +	},
 +

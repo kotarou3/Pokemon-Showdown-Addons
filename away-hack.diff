@@ -41,12 +41,12 @@ index 6101685..96d5d67 100644
  		if (!roomid) roomid = 'lobby';
 +		var name = this.name + (this.away ? " - \u0410\u051d\u0430\u0443" : "");
  		if (this.locked) {
--			return config.lockedSymbol+this.name;
-+			return config.lockedSymbol+name;
+-			return Config.lockedSymbol+this.name;
++			return Config.lockedSymbol+name;
  		}
  		if (this.mutedRooms[roomid]) {
--			return config.mutedSymbol+this.name;
-+			return config.mutedSymbol+name;
+-			return Config.mutedSymbol+this.name;
++			return Config.mutedSymbol+name;
  		}
  		var room = Rooms.rooms[roomid];
  		if (room.auth) {
@@ -55,8 +55,8 @@ index 6101685..96d5d67 100644
 +				return room.auth[this.userid] + name;
  			}
  			if (room.isPrivate) {
--				return config.groups.default[room.type + 'Room']+this.name;
-+				return config.groups.default[room.type + 'Room']+name;
+-				return Config.groups.default[room.type + 'Room']+this.name;
++				return Config.groups.default[room.type + 'Room']+name;
  			}
  		}
 -		return this.group+this.name;
