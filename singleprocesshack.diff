@@ -1,8 +1,8 @@
 diff --git a/battle-engine.js b/battle-engine.js
-index de5482a..f0fa1bc 100644
+index 2a1cc48..308dc64 100644
 --- a/battle-engine.js
 +++ b/battle-engine.js
-@@ -20,9 +20,9 @@ if (!('existsSync' in fs)) {
+@@ -15,9 +15,9 @@ require('sugar');
  global.Config = require('./config/config.js');
  
  // graceful crash - allow current battles to finish before restarting
@@ -14,7 +14,7 @@ index de5482a..f0fa1bc 100644
  
  /**
   * Converts anything to an ID. An ID must have only lowercase alphanumeric
-@@ -90,7 +90,7 @@ var Battles = {};
+@@ -72,7 +72,7 @@ var Battles = {};
  
  // Receive and process a message sent using Simulator.prototype.send in
  // another process.
@@ -23,7 +23,7 @@ index de5482a..f0fa1bc 100644
  	//console.log('CHILD MESSAGE RECV: "'+message+'"');
  	var nlIndex = message.indexOf("\n");
  	var more = '';
-@@ -111,9 +111,9 @@ process.on('message', function(message) {
+@@ -93,9 +93,9 @@ process.on('message', function(message) {
  
  				if (!require('./crashlogger.js')(fakeErr, 'A battle')) {
  					var ministack = (""+err.stack).split("\n").slice(0,2).join("<br />");
@@ -35,7 +35,7 @@ index de5482a..f0fa1bc 100644
  				}
  			}
  		}
-@@ -3782,7 +3782,7 @@ var Battle = (function() {
+@@ -3770,7 +3770,7 @@ var Battle = (function() {
  	// Simulator.prototype.receive in simulator.js (in another process).
  	Battle.prototype.send = function(type, data) {
  		if (Array.isArray(data)) data = data.join("\n");
@@ -45,10 +45,10 @@ index de5482a..f0fa1bc 100644
  	// This function is called by this process's 'message' event.
  	Battle.prototype.receive = function(data, more) {
 diff --git a/commands.js b/commands.js
-index 837c744..5c9a74a 100644
+index 70ec77d..9fe094c 100644
 --- a/commands.js
 +++ b/commands.js
-@@ -1004,11 +1004,12 @@ var commands = exports.commands = {
+@@ -1019,11 +1019,12 @@ var commands = exports.commands = {
  
  		} else if (target === 'battles') {
  
@@ -64,7 +64,7 @@ index 837c744..5c9a74a 100644
  				// uncache the tools.js dependency tree
  				CommandParser.uncacheTree('./tools.js');
  				// reload tools.js
-@@ -1025,7 +1026,8 @@ var commands = exports.commands = {
+@@ -1040,7 +1041,8 @@ var commands = exports.commands = {
  				return this.sendReply("Formats have been hotpatched.");
  			} catch (e) {
  				return this.sendReply("Something failed while trying to hotpatch formats: \n" + e.stack);
@@ -74,7 +74,7 @@ index 837c744..5c9a74a 100644
  
  		} else if (target === 'learnsets') {
  			try {
-@@ -1136,9 +1138,9 @@ var commands = exports.commands = {
+@@ -1151,9 +1153,9 @@ var commands = exports.commands = {
  			return this.sendReply("Wait for /updateserver to finish before using /kill.");
  		}
  
@@ -86,8 +86,41 @@ index 837c744..5c9a74a 100644
  
  		if (!room.destroyLog) {
  			process.exit();
+diff --git a/fake-process.js b/fake-process.js
+new file mode 100644
+index 0000000..bb8ea2a
+--- /dev/null
++++ b/fake-process.js
+@@ -0,0 +1,27 @@
++var EventEmitter = require("events").EventEmitter;
++
++function FakeProcessHelper(input, output) {
++	this.input = input;
++	this.output = output;
++};
++FakeProcessHelper.prototype = {
++	input: null,
++	output: null,
++	on: function (event, callback) {
++		setImmediate(this.input.on.bind(this.input, event, callback));
++		return this;
++	},
++	send: function (message) {
++		setImmediate(this.output.emit.bind(this.output, 'message', message));
++		return this;
++	}
++};
++
++function FakeProcess() {
++	this.serverEmitter = new EventEmitter();
++	this.clientEmitter = new EventEmitter();
++	this.server = new FakeProcessHelper(this.clientEmitter, this.serverEmitter);
++	this.client = new FakeProcessHelper(this.serverEmitter, this.clientEmitter);
++}
++
++exports.FakeProcess = FakeProcess;
 diff --git a/simulator.js b/simulator.js
-index 16334a4..c00f900 100644
+index 9cef197..590827d 100644
 --- a/simulator.js
 +++ b/simulator.js
 @@ -15,7 +15,8 @@ var simulators = {};
@@ -294,7 +327,7 @@ index 9e0bdc3..3a32237 100644
 -}
 +//}
 diff --git a/team-validator.js b/team-validator.js
-index 249b7fe..649d48a 100644
+index 0f33bd7..1fef1b0 100644
 --- a/team-validator.js
 +++ b/team-validator.js
 @@ -7,7 +7,7 @@
@@ -328,14 +361,13 @@ index 249b7fe..649d48a 100644
  	};
  
  	var synchronousValidators = {};
-@@ -96,14 +105,14 @@ if (!process.send) {
+@@ -96,13 +105,13 @@ if (!process.send) {
  		if (!synchronousValidators[format]) synchronousValidators[format] = new Validator(format);
  		return synchronousValidators[format].checkLearnset(move, template, lsetData);
  	};
 -} else {
 +/*} else {
  	require('sugar');
- 	global.fs = require('fs');
  	global.Config = require('./config/config.js');
  
  	process.on('uncaughtException', function (err) {
@@ -345,7 +377,7 @@ index 249b7fe..649d48a 100644
  
  	/**
  	 * Converts anything to an ID. An ID must have only lowercase alphanumeric
-@@ -113,18 +122,18 @@ if (!process.send) {
+@@ -112,17 +121,17 @@ if (!process.send) {
  	 * If an object with an ID is passed, its ID will be returned.
  	 * Otherwise, an empty string will be returned.
  	 */
@@ -355,9 +387,8 @@ index 249b7fe..649d48a 100644
  		else if (text && text.userid) text = text.userid;
  
  		return string(text).toLowerCase().replace(/[^a-z0-9]+/g, '');
- 	};
--	global.toUserid = toId;
-+	global.toUserid = toId;*/
+-	};
++	};*/
  
  	/**
  	 * Validates a username or Pokemon nickname
@@ -367,7 +398,7 @@ index 249b7fe..649d48a 100644
  	global.toName = function(name) {
  		name = string(name);
  		name = name.replace(/[\|\s\[\]\,]+/g, ' ').trim();
-@@ -136,7 +145,7 @@ if (!process.send) {
+@@ -134,7 +143,7 @@ if (!process.send) {
  			name = Config.nameFilter(name);
  		}
  		return name.trim();
@@ -376,7 +407,7 @@ index 249b7fe..649d48a 100644
  
  	/**
  	 * Safely ensures the passed variable is a string
-@@ -144,7 +153,7 @@ if (!process.send) {
+@@ -142,7 +151,7 @@ if (!process.send) {
  	 * If we're expecting a string and being given anything that isn't a string
  	 * or a number, it's safe to assume it's an error, and return ''
  	 */
@@ -385,7 +416,7 @@ index 249b7fe..649d48a 100644
  		if (typeof str === 'string' || typeof str === 'number') return ''+str;
  		return '';
  	};
-@@ -179,7 +188,7 @@ if (!process.send) {
+@@ -177,7 +186,7 @@ if (!process.send) {
  			respond(id, true, packedTeam);
  		}
  	});
