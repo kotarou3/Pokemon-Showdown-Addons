@@ -1,9 +1,9 @@
 diff --git a/commands.js b/commands.js
-index 137da72..a17865b 100644
+index 58ad6c0..773bb82 100644
 --- a/commands.js
 +++ b/commands.js
-@@ -1083,6 +1083,8 @@ var commands = exports.commands = {
- 	kill: function(target, room, user) {
+@@ -1145,6 +1145,8 @@ var commands = exports.commands = {
+ 	kill: function (target, room, user) {
  		if (!this.can('lockdown')) return false;
  
 +		return this.sendReply("If you need to restart the server, please ask kota or pika.");

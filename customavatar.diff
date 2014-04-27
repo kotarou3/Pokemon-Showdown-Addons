@@ -1,5 +1,5 @@
 diff --git a/app.js b/app.js
-index a64b983..0244174 100644
+index fc3a58d..f597dba 100644
 --- a/app.js
 +++ b/app.js
 @@ -92,6 +92,32 @@ if (!fs.existsSync('./config/config.js')) {
@@ -24,7 +24,7 @@ index a64b983..0244174 100644
 +		if (typeof Config.customAvatars[a] === 'number')
 +			newCustomAvatars[a] = Config.customAvatars[a];
 +		else
-+			fs.exists('./config/avatars/' + Config.customAvatars[a], (function(user, file, isExists) {
++			fs.exists('./config/avatars/' + Config.customAvatars[a], (function (user, file, isExists) {
 +				if (isExists)
 +					Config.customAvatars[user] = file;
 +			}).bind(null, a, Config.customAvatars[a]));
@@ -32,7 +32,7 @@ index a64b983..0244174 100644
 +	Config.customAvatars = newCustomAvatars;
 +}
 +
- var watchFile = function() {
+ var watchFile = function () {
  	try {
  		return fs.watchFile.apply(fs, arguments);
 @@ -106,6 +132,7 @@ if (Config.watchConfig) {
@@ -50,10 +50,10 @@ index a64b983..0244174 100644
 +
 +reloadCustomAvatars();
 diff --git a/config/commands.js b/config/commands.js
-index c776f6d..656edd8 100644
+index a0d1ae0..e50d9f7 100644
 --- a/config/commands.js
 +++ b/config/commands.js
-@@ -1093,6 +1093,107 @@ var commands = exports.commands = {
+@@ -1108,6 +1108,107 @@ var commands = exports.commands = {
  	},
  
  	/*********************************************************

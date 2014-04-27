@@ -1,20 +1,20 @@
 diff --git a/commands.js b/commands.js
-index 137da72..e692b85 100644
+index 58ad6c0..7b109c4 100644
 --- a/commands.js
 +++ b/commands.js
-@@ -1525,7 +1525,6 @@ var commands = exports.commands = {
+@@ -1593,7 +1593,6 @@ var commands = exports.commands = {
  		});
  	},
  
 -	away: 'blockchallenges',
  	idle: 'blockchallenges',
- 	blockchallenges: function(target, room, user) {
+ 	blockchallenges: function (target, room, user) {
  		user.blockChallenges = true;
 diff --git a/config/commands.js b/config/commands.js
-index 5bebc54..0a8fec2 100644
+index a0d1ae0..1b1f230 100644
 --- a/config/commands.js
 +++ b/config/commands.js
-@@ -1055,6 +1055,16 @@ var commands = exports.commands = {
+@@ -1108,6 +1108,16 @@ var commands = exports.commands = {
  	},
  
  	/*********************************************************
@@ -32,21 +32,21 @@ index 5bebc54..0a8fec2 100644
  	 *********************************************************/
  
 diff --git a/users.js b/users.js
-index 6101685..96d5d67 100644
+index a324ba9..efe6aee 100644
 --- a/users.js
 +++ b/users.js
-@@ -384,22 +384,23 @@ var User = (function () {
+@@ -388,22 +388,23 @@ var User = (function () {
  	};
- 	User.prototype.getIdentity = function(roomid) {
+ 	User.prototype.getIdentity = function (roomid) {
  		if (!roomid) roomid = 'lobby';
 +		var name = this.name + (this.away ? " - \u0410\u051d\u0430\u0443" : "");
  		if (this.locked) {
--			return Config.lockedSymbol+this.name;
-+			return Config.lockedSymbol+name;
+-			return Config.lockedSymbol + this.name;
++			return Config.lockedSymbol + name;
  		}
  		if (this.mutedRooms[roomid]) {
--			return Config.mutedSymbol+this.name;
-+			return Config.mutedSymbol+name;
+-			return Config.mutedSymbol + this.name;
++			return Config.mutedSymbol + name;
  		}
  		var room = Rooms.rooms[roomid];
  		if (room.auth) {
@@ -55,12 +55,12 @@ index 6101685..96d5d67 100644
 +				return room.auth[this.userid] + name;
  			}
  			if (room.isPrivate) {
--				return Config.groups.default[room.type + 'Room']+this.name;
-+				return Config.groups.default[room.type + 'Room']+name;
+-				return Config.groups.default[room.type + 'Room'] + this.name;
++				return Config.groups.default[room.type + 'Room'] + name;
  			}
  		}
--		return this.group+this.name;
-+		return this.group+name;
+-		return this.group + this.name;
++		return this.group + name;
  	};
- 	User.prototype.can = function(permission, target, room) {
+ 	User.prototype.can = function (permission, target, room) {
  		if (this.hasSysopAccess()) return true;

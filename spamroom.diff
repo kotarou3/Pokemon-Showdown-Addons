@@ -1,18 +1,18 @@
 diff --git a/app.js b/app.js
-index 2fe7ab5..cf64801 100644
+index fc3a58d..cede459 100644
 --- a/app.js
 +++ b/app.js
-@@ -432,3 +432,5 @@ fs.readFile('./config/ipbans.txt', function (err, data) {
+@@ -416,3 +416,5 @@ fs.readFile('./config/ipbans.txt', function (err, data) {
  	}
  	Users.checkRangeBanned = Cidr.checker(rangebans);
  });
 +
 +global.Spamroom = require('./spamroom.js');
 diff --git a/commands.js b/commands.js
-index 37185b7..5352697 100644
+index 58ad6c0..c46f312 100644
 --- a/commands.js
 +++ b/commands.js
-@@ -119,7 +119,13 @@ var commands = exports.commands = {
+@@ -120,7 +120,13 @@ var commands = exports.commands = {
  
  		var message = '|pm|' + user.getIdentity() + '|' + targetUser.getIdentity() + '|' + target;
  		user.send(message);
@@ -28,10 +28,10 @@ index 37185b7..5352697 100644
  		user.lastPM = targetUser.userid;
  	},
 diff --git a/config/commands.js b/config/commands.js
-index 54f121d..6fc3ffa 100644
+index a0d1ae0..0a6a046 100644
 --- a/config/commands.js
 +++ b/config/commands.js
-@@ -1055,6 +1055,45 @@ var commands = exports.commands = {
+@@ -1108,6 +1108,45 @@ var commands = exports.commands = {
  	},
  
  	/*********************************************************
@@ -78,10 +78,10 @@ index 54f121d..6fc3ffa 100644
  	 *********************************************************/
  
 diff --git a/rooms.js b/rooms.js
-index 3d41f4d..1c946c7 100644
+index 1a630b5..ba202a1 100644
 --- a/rooms.js
 +++ b/rooms.js
-@@ -1132,7 +1132,12 @@ var BattleRoom = (function() {
+@@ -1134,7 +1134,12 @@ var BattleRoom = (function () {
  		message = CommandParser.parse(message, this, user, connection);
  
  		if (message) {
@@ -95,105 +95,17 @@ index 3d41f4d..1c946c7 100644
  		}
  		this.update();
  	};
-@@ -1493,7 +1498,12 @@ var ChatRoom = (function() {
+@@ -1495,7 +1500,12 @@ var ChatRoom = (function () {
  		message = CommandParser.parse(message, this, user, connection);
  
  		if (message) {
--			this.add('|c|'+user.getIdentity(this.id)+'|'+message, true);
+-			this.add('|c|' + user.getIdentity(this.id) + '|' + message, true);
 +			if (Spamroom.isSpamroomed(user)) {
 +				Spamroom.room.add('|c|' + user.getIdentity() + "|__(To " + this.id + ")__ " + message);
 +				connection.sendTo(this, '|c|' + user.getIdentity(this.id) + '|' + message);
 +			} else {
-+				this.add('|c|'+user.getIdentity(this.id)+'|'+message, true);
++				this.add('|c|' + user.getIdentity(this.id) + '|' + message, true);
 +			}
  		}
  		this.update();
  	};
-diff --git a/spamroom.js b/spamroom.js
-new file mode 100644
-index 0000000..8e1a64f
---- /dev/null
-+++ b/spamroom.js
-@@ -0,0 +1,82 @@
-+var spamroom = Rooms.get('spamroom');
-+if (!spamroom) {
-+	Rooms.global.addChatRoom('Spam Room');
-+	spamroom = Rooms.get('spamroom');
-+	spamroom.isPrivate = true;
-+	spamroom.staffRoom = true;
-+	if (spamroom.chatRoomData) {
-+		spamroom.chatRoomData.isPrivate = true;
-+		spamroom.chatRoomData.staffRoom = true;
-+		spamroom.addedUsers = spamroom.chatRoomData.addedUsers = {};
-+		Rooms.global.writeChatRoomData();
-+	} else {
-+		spamroom.addedUsers = {};
-+	}
-+}
-+if (Object.size(spamroom.addedUsers) > 0)
-+	spamroom.add("||Loaded user list: " + Object.keys(spamroom.addedUsers).sort().join(", "));
-+exports.room = spamroom;
-+
-+function getAllAlts(user) {
-+	var targets = {};
-+	if (typeof user === 'string')
-+		targets[toId(user)] = 1;
-+	else
-+		user.getAlts().concat(user.name).forEach(function (alt) {
-+			targets[toId(alt)] = 1;
-+			Object.keys(Users.get(alt).prevNames).forEach(function (name) {
-+				targets[toId(name)] = 1;
-+			});
-+		});
-+	return targets;
-+}
-+
-+exports.addUser = function (user) {
-+	var targets = getAllAlts(user);
-+	for (var u in targets)
-+		if (spamroom.addedUsers[u])
-+			delete targets[u];
-+		else
-+			spamroom.addedUsers[u] = 1;
-+	Rooms.global.writeChatRoomData();
-+
-+	targets = Object.keys(targets).sort();
-+	if (targets.length > 0)
-+		spamroom.add("||Added users: " + targets.join(", "));
-+	return targets;
-+};
-+
-+exports.removeUser = function (user) {
-+	var targets = getAllAlts(user);
-+	for (var u in targets)
-+		if (!spamroom.addedUsers[u])
-+			delete targets[u];
-+		else
-+			delete spamroom.addedUsers[u];
-+	Rooms.global.writeChatRoomData();
-+
-+	targets = Object.keys(targets).sort();
-+	if (targets.length > 0)
-+		spamroom.add("||Removed users: " + targets.join(", "));
-+	return targets;
-+};
-+
-+exports.isSpamroomed = function (user) {
-+	var targets = getAllAlts(user);
-+	if (Object.keys(targets).intersect(Object.keys(spamroom.addedUsers)).length === 0)
-+		return false;
-+
-+	var addedUsers = {};
-+	Array.prototype.exclude.apply(Object.keys(targets), Object.keys(spamroom.addedUsers)).forEach(function (user) {
-+		if (spamroom.addedUsers[user])
-+			return;
-+		spamroom.addedUsers[user] = addedUsers[user] = 1;
-+	});
-+
-+	if (Object.size(addedUsers) > 0) {
-+		Rooms.global.writeChatRoomData();
-+		spamroom.add("||Alts automatically added: " + Object.keys(addedUsers).sort().join(", "));
-+	}
-+
-+	return true;
-+};

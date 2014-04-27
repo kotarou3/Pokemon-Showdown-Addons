@@ -1,15 +1,15 @@
 diff --git a/commands.js b/commands.js
-index 137da72..6eca3e2 100644
+index 58ad6c0..bd37949 100644
 --- a/commands.js
 +++ b/commands.js
-@@ -403,8 +403,21 @@ var commands = exports.commands = {
+@@ -432,8 +432,21 @@ var commands = exports.commands = {
  	 * Moderating: Punishments
  	 *********************************************************/
  
 -	kick: 'warn',
 -	k: 'warn',
 +	k: 'kick',
-+	kick: function(target, room, user){
++	kick: function (target, room, user){
 +		if (!target) return;
 +		target = this.splitTarget(target);
 +		var targetUser = this.targetUser;
@@ -18,19 +18,19 @@ index 137da72..6eca3e2 100644
 +		}
 +		if (!this.can('kick', targetUser, room)) return false;
 +		var msg = "kicked by " + user.name + (target ? " (" + target + ")" : "") + ".";
-+		this.addModCommand(targetUser.name + " was " + msg);
++		this.addModCommand("" + targetUser.name + " was " + msg);
 +		targetUser.popup("You have been " + msg);
 +		targetUser.disconnectAll();
 +	},
 +
- 	warn: function(target, room, user) {
+ 	warn: function (target, room, user) {
  		if (!target) return this.parse('/help warn');
  
 diff --git a/config/commands.js b/config/commands.js
-index 5bebc54..1cdcf18 100644
+index a0d1ae0..d18fa69 100644
 --- a/config/commands.js
 +++ b/config/commands.js
-@@ -1268,9 +1268,9 @@ var commands = exports.commands = {
+@@ -1308,9 +1308,9 @@ var commands = exports.commands = {
  			matched = true;
  			this.sendReply("/kickbattle [username], [reason] - Kicks an user from a battle with reason. Requires: " + Users.getGroupsThatCan('kick').join(" "));
  		}
