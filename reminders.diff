@@ -10,7 +10,7 @@ index a0d1ae0..abef0da 100644
 +	 *********************************************************/
 +
 +	reminders: 'reminder',
-+	reminder: function(target, room, user) {
++	reminder: function (target, room, user) {
 +		if (room.type !== 'chat') return this.sendReply("This command can only be used in chatrooms.");
 +
 +		var parts = target.split(',');

@@ -21,7 +21,7 @@ index a0d1ae0..1b1f230 100644
 +	 * Custom commands
 +	 *********************************************************/
 +
-+	away: function(target, room, user) {
++	away: function (target, room, user) {
 +		user.away = !user.away;
 +		user.updateIdentity();
 +		this.sendReply("You are " + (user.away ? "now" : "no longer") + " away.");

@@ -10,7 +10,7 @@ index 3a7f807..76b17e7 100644
 +	 *********************************************************/
 +
 +	hide: 'hideauth',
-+	hideauth: function(target, room, user) {
++	hideauth: function (target, room, user) {
 +		if (!this.can('hideauth')) return false;
 +		target = target || Config.groups.default.global;
 +		if (!Config.groups.global[target]) {
@@ -30,7 +30,7 @@ index 3a7f807..76b17e7 100644
 +	},
 +
 +	show: 'showauth',
-+	showauth: function(target, room, user) {
++	showauth: function (target, room, user) {
 +		if (!this.can('hideauth')) return false;
 +		delete user.getIdentity;
 +		user.updateIdentity();

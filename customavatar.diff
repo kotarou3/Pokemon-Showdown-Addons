@@ -6,7 +6,7 @@ index fc3a58d..f597dba 100644
  
  global.Config = require('./config/config.js');
  
-+global.reloadCustomAvatars = function() {
++global.reloadCustomAvatars = function () {
 +	var path = require('path');
 +	var newCustomAvatars = {};
 +	fs.readdirSync('./config/avatars').forEach(function (file) {
@@ -14,7 +14,7 @@ index fc3a58d..f597dba 100644
 +		if (ext !== '.png' && ext !== '.gif')
 +			return;
 +
-+		var user = toUserid(path.basename(file, ext));
++		var user = toId(path.basename(file, ext));
 +		newCustomAvatars[user] = file;
 +		delete Config.customAvatars[user];
 +	});
@@ -61,8 +61,8 @@ index a0d1ae0..e50d9f7 100644
 +	 *********************************************************/
 +
 +	customavatars: 'customavatar',
-+	customavatar: (function() {
-+		const script = (function() {/*
++	customavatar: (function () {
++		const script = (function () {/*
 +			FILENAME=`mktemp`
 +			function cleanup {
 +				rm -f $FILENAME
@@ -84,7 +84,7 @@ index a0d1ae0..e50d9f7 100644
 +		*/}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
 +
 +		var pendingAdds = {};
-+		return function(target) {
++		return function (target) {
 +			var parts = target.split(',');
 +			var cmd = parts[0].trim().toLowerCase();
 +
@@ -125,7 +125,7 @@ index a0d1ae0..e50d9f7 100644
 +					var avatar = pendingAdds[hash].avatar;
 +					delete pendingAdds[hash];
 +
-+					require('child_process').execFile('bash', ['-c', script, '-', avatar, './config/avatars/' + userid], (function(e, out, err) {
++					require('child_process').execFile('bash', ['-c', script, '-', avatar, './config/avatars/' + userid], (function (e, out, err) {
 +						if (e) {
 +							this.sendReply(userid + "'s custom avatar failed to be set. Script output:");
 +							(out + err).split('\n').forEach(this.sendReply.bind(this));

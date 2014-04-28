@@ -16,7 +16,7 @@ index 8c20f90..8b34b5c 100644
 +			"didn't get a cool message because none have been added!"
 +		];
 +
-+		return function(target, room, user) {
++		return function (target, room, user) {
 +			if (Config.poofOff) return this.sendReply("Poof is currently disabled.");
 +			if (target && !this.can('broadcast')) return false;
 +			if (room.id !== 'lobby') return false;
@@ -37,13 +37,13 @@ index 8c20f90..8b34b5c 100644
 +	})(),
 +
 +	poofoff: 'nopoof',
-+	nopoof: function() {
++	nopoof: function () {
 +		if (!this.can('poofoff')) return false;
 +		Config.poofOff = true;
 +		return this.sendReply("Poof is now disabled.");
 +	},
 +
-+	poofon: function() {
++	poofon: function () {
 +		if (!this.can('poofoff')) return false;
 +		Config.poofOff = false;
 +		return this.sendReply("Poof is now enabled.");
