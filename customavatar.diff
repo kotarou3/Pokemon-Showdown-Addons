@@ -1,5 +1,5 @@
 diff --git a/app.js b/app.js
-index fc3a58d..f597dba 100644
+index fc3a58d..43bff06 100644
 --- a/app.js
 +++ b/app.js
 @@ -92,6 +92,32 @@ if (!fs.existsSync('./config/config.js')) {
@@ -50,7 +50,7 @@ index fc3a58d..f597dba 100644
 +
 +reloadCustomAvatars();
 diff --git a/config/commands.js b/config/commands.js
-index a0d1ae0..e50d9f7 100644
+index a0d1ae0..f46dfff 100644
 --- a/config/commands.js
 +++ b/config/commands.js
 @@ -1108,6 +1108,107 @@ var commands = exports.commands = {
@@ -71,7 +71,7 @@ index a0d1ae0..e50d9f7 100644
 +
 +			set -xe
 +
-+			wget "$1" -nv -O $FILENAME
++			timeout 10 wget "$1" -nv -O $FILENAME
 +
 +			FRAMES=`identify $FILENAME | wc -l`
 +			if [ $FRAMES -gt 1 ]; then
@@ -80,7 +80,7 @@ index a0d1ae0..e50d9f7 100644
 +				EXT=".png"
 +			fi
 +
-+			convert $FILENAME -layers TrimBounds -coalesce -adaptive-resize 80x80\> -background transparent -gravity center -extent 80x80 "$2$EXT"
++			timeout 10 convert $FILENAME -layers TrimBounds -coalesce -adaptive-resize 80x80\> -background transparent -gravity center -extent 80x80 "$2$EXT"
 +		*/}).toString().match(/[^]*\/\*([^]*)\*\/\}$/)[1];
 +
 +		var pendingAdds = {};
@@ -143,7 +143,7 @@ index a0d1ae0..e50d9f7 100644
 +
 +					if (Config.customAvatars[userid].toString().split('.').slice(0, -1).join('.') !== userid)
 +						return this.sendReply(userid + "'s custom avatar (" + Config.customAvatars[userid] + ") cannot be removed with this script.");
-+					fs.unlink('./config/avatars/' + Config.customAvatars[userid], (function (e) {
++					require('fs').unlink('./config/avatars/' + Config.customAvatars[userid], (function (e) {
 +						if (e) return this.sendReply(userid + "'s custom avatar (" + Config.customAvatars[userid] + ") could not be removed: " + e.toString());
 +
 +						delete Config.customAvatars[userid];
