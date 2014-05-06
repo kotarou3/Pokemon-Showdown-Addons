@@ -1,8 +1,10 @@
 diff --git a/config/commands.js b/config/commands.js
-index a0d1ae0..abef0da 100644
+index be87fe0..d954a1d 100644
 --- a/config/commands.js
 +++ b/config/commands.js
-@@ -1108,6 +1108,65 @@ var commands = exports.commands = {
+@@ -1120,10 +1120,69 @@ var commands = exports.commands = {
+ 		// secret sysop command
+ 		room.add(target);
  	},
  
  	/*********************************************************
@@ -68,11 +70,15 @@ index a0d1ae0..abef0da 100644
  	 * Help commands
  	 *********************************************************/
  
+ 	commands: 'help',
+ 	h: 'help',
 diff --git a/rooms.js b/rooms.js
 index 1a630b5..803f224 100644
 --- a/rooms.js
 +++ b/rooms.js
-@@ -1405,6 +1405,8 @@ var ChatRoom = (function () {
+@@ -1403,10 +1403,12 @@ var ChatRoom = (function () {
+ 		var userList = this.userList ? this.userList : this.getUserList();
+ 		var modchat = this.getModchatNote();
  		this.send('|init|chat\n|title|' + this.title + '\n' + userList + '\n' + this.logGetLast(25).join('\n') + modchat, connection);
  		if (global.Tournaments && Tournaments.get(this.id))
  			Tournaments.get(this.id).update(user);
@@ -81,7 +87,11 @@ index 1a630b5..803f224 100644
  	};
  	ChatRoom.prototype.onJoin = function (user, connection, merging) {
  		if (!user) return false; // ???
-@@ -1428,6 +1430,8 @@ var ChatRoom = (function () {
+ 		if (this.users[user.userid]) return user;
+ 
+@@ -1426,10 +1428,12 @@ var ChatRoom = (function () {
+ 
+ 		if (!merging) {
  			var userList = this.userList ? this.userList : this.getUserList();
  			var modchat = this.getModchatNote();
  			this.send('|init|chat\n|title|' + this.title + '\n' + userList + '\n' + this.logGetLast(100).join('\n') + modchat, connection);
@@ -90,3 +100,5 @@ index 1a630b5..803f224 100644
  		}
  		if (global.Tournaments && Tournaments.get(this.id))
  			Tournaments.get(this.id).update(user);
+ 
+ 		return user;

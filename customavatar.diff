@@ -1,8 +1,10 @@
 diff --git a/app.js b/app.js
-index fc3a58d..43bff06 100644
+index 39a97be..22c2c10 100644
 --- a/app.js
 +++ b/app.js
-@@ -92,6 +92,32 @@ if (!fs.existsSync('./config/config.js')) {
+@@ -90,10 +90,36 @@ if (!fs.existsSync('./config/config.js')) {
+  * Load configuration
+  *********************************************************/
  
  global.Config = require('./config/config.js');
  
@@ -35,7 +37,11 @@ index fc3a58d..43bff06 100644
  var watchFile = function () {
  	try {
  		return fs.watchFile.apply(fs, arguments);
-@@ -106,6 +132,7 @@ if (Config.watchConfig) {
+ 	} catch (e) {
+ 		console.log('Your version of node does not support `fs.watchFile`');
+@@ -104,10 +130,11 @@ if (Config.watchConfig) {
+ 	watchFile('./config/config.js', function (curr, prev) {
+ 		if (curr.mtime <= prev.mtime) return;
  		try {
  			delete require.cache[require.resolve('./config/config.js')];
  			Config = require('./config/config.js');
@@ -43,17 +49,23 @@ index fc3a58d..43bff06 100644
  			console.log('Reloaded config/config.js');
  		} catch (e) {}
  	});
-@@ -416,3 +443,5 @@ fs.readFile('./config/ipbans.txt', function (err, data) {
+ }
+ 
+@@ -418,5 +445,7 @@ fs.readFile('./config/ipbans.txt', function (err, data) {
+ 			Users.bannedIps[data[i]] = '#ipban';
+ 		}
  	}
  	Users.checkRangeBanned = Cidr.checker(rangebans);
  });
 +
 +reloadCustomAvatars();
 diff --git a/config/commands.js b/config/commands.js
-index a0d1ae0..f46dfff 100644
+index be87fe0..2c24197 100644
 --- a/config/commands.js
 +++ b/config/commands.js
-@@ -1108,6 +1108,107 @@ var commands = exports.commands = {
+@@ -1120,10 +1120,111 @@ var commands = exports.commands = {
+ 		// secret sysop command
+ 		room.add(target);
  	},
  
  	/*********************************************************
@@ -161,3 +173,5 @@ index a0d1ae0..f46dfff 100644
  	 * Help commands
  	 *********************************************************/
  
+ 	commands: 'help',
+ 	h: 'help',

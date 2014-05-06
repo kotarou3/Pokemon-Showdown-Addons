@@ -1,8 +1,10 @@
 diff --git a/commands.js b/commands.js
-index 58ad6c0..bd37949 100644
+index f1ceaed..72778a7 100644
 --- a/commands.js
 +++ b/commands.js
-@@ -432,8 +432,21 @@ var commands = exports.commands = {
+@@ -438,12 +438,25 @@ var commands = exports.commands = {
+ 
+ 	/*********************************************************
  	 * Moderating: Punishments
  	 *********************************************************/
  
@@ -26,11 +28,15 @@ index 58ad6c0..bd37949 100644
  	warn: function (target, room, user) {
  		if (!target) return this.parse('/help warn');
  
+ 		target = this.splitTarget(target);
+ 		var targetUser = this.targetUser;
 diff --git a/config/commands.js b/config/commands.js
-index a0d1ae0..d18fa69 100644
+index be87fe0..4b7c54e 100644
 --- a/config/commands.js
 +++ b/config/commands.js
-@@ -1308,9 +1308,9 @@ var commands = exports.commands = {
+@@ -1320,13 +1320,13 @@ var commands = exports.commands = {
+ 		}
+ 		if (Users.can(target, 'kick') || target === 'kickbattle ') {
  			matched = true;
  			this.sendReply("/kickbattle [username], [reason] - Kicks an user from a battle with reason. Requires: " + Users.getGroupsThatCan('kick').join(" "));
  		}
@@ -42,3 +48,5 @@ index a0d1ae0..d18fa69 100644
  		}
  		if (Users.can(target, 'mute') || target === 'mute' || target === 'm') {
  			matched = true;
+ 			this.sendReply("/mute OR /m [username], [reason] - Mutes a user with reason for 7 minutes. Requires: " + Users.getGroupsThatCan('mute', room).join(" "));
+ 		}

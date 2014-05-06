@@ -1,8 +1,10 @@
 diff --git a/commands.js b/commands.js
-index 58ad6c0..7b109c4 100644
+index f1ceaed..8e8c72f 100644
 --- a/commands.js
 +++ b/commands.js
-@@ -1593,7 +1593,6 @@ var commands = exports.commands = {
+@@ -1597,11 +1597,10 @@ var commands = exports.commands = {
+ 		user.prepBattle(target, 'challenge', connection, function (result) {
+ 			if (result) user.makeChallenge(targetUser, target);
  		});
  	},
  
@@ -10,11 +12,15 @@ index 58ad6c0..7b109c4 100644
  	idle: 'blockchallenges',
  	blockchallenges: function (target, room, user) {
  		user.blockChallenges = true;
+ 		this.sendReply("You are now blocking all incoming challenge requests.");
+ 	},
 diff --git a/config/commands.js b/config/commands.js
-index a0d1ae0..1b1f230 100644
+index be87fe0..9dffb04 100644
 --- a/config/commands.js
 +++ b/config/commands.js
-@@ -1108,6 +1108,16 @@ var commands = exports.commands = {
+@@ -1120,10 +1120,20 @@ var commands = exports.commands = {
+ 		// secret sysop command
+ 		room.add(target);
  	},
  
  	/*********************************************************
@@ -31,11 +37,15 @@ index a0d1ae0..1b1f230 100644
  	 * Help commands
  	 *********************************************************/
  
+ 	commands: 'help',
+ 	h: 'help',
 diff --git a/users.js b/users.js
-index a324ba9..efe6aee 100644
+index f8733d0..550c28f 100644
 --- a/users.js
 +++ b/users.js
-@@ -388,22 +388,23 @@ var User = (function () {
+@@ -382,26 +382,27 @@ var User = (function () {
+ 	User.prototype.popup = function (message) {
+ 		this.send('|popup|' + message.replace(/\n/g, '||'));
  	};
  	User.prototype.getIdentity = function (roomid) {
  		if (!roomid) roomid = 'lobby';
@@ -64,3 +74,5 @@ index a324ba9..efe6aee 100644
  	};
  	User.prototype.can = function (permission, target, room) {
  		if (this.hasSysopAccess()) return true;
+ 
+ 		var group = this.group;
