@@ -1,8 +1,10 @@
 diff --git a/config/commands.js b/config/commands.js
-index bb495a5..a25be3a 100644
+index 227833d..2e9e0cd 100644
 --- a/config/commands.js
 +++ b/config/commands.js
-@@ -1010,6 +1010,16 @@ var commands = exports.commands = {
+@@ -1120,10 +1120,20 @@ var commands = exports.commands = {
+ 		// secret sysop command
+ 		room.add(target);
  	},
  
  	/*********************************************************
@@ -19,3 +21,5 @@ index bb495a5..a25be3a 100644
  	 * Help commands
  	 *********************************************************/
  
+ 	commands: 'help',
+ 	h: 'help',
