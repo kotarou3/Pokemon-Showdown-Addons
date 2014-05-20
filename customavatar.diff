@@ -103,7 +103,7 @@ index be87fe0..2c24197 100644
 +			if (cmd in {'':1, show:1, view:1, display:1}) {
 +				var message = "";
 +				for (var a in Config.customAvatars)
-+					message += "<strong>" + sanitize(a) + ":</strong> " + sanitize(Config.customAvatars[a]) + "<br />";
++					message += "<strong>" + Tools.escapeHTML(a) + ":</strong> " + Tools.escapeHTML(Config.customAvatars[a]) + "<br />";
 +				return this.sendReplyBox(message);
 +			}
 +

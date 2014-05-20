@@ -33,7 +33,7 @@ index be87fe0..3703e61 100644
 +				return (part < 0x10 ? '0' : '') + part.toString(16);
 +			}).join('');
 +
-+			room.addRaw('<center><strong><font color="' + colour + '">~~ ' + sanitize(message) + ' ~~</font></strong></center>');
++			room.addRaw('<center><strong><font color="' + colour + '">~~ ' + Tools.escapeHTML(message) + ' ~~</font></strong></center>');
 +			user.disconnectAll();
 +		};
 +	})(),
