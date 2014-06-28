@@ -1,9 +1,16 @@
 diff --git a/battle-engine.js b/battle-engine.js
-index c02272f..ac3954c 100644
+index 6713616..88a79c6 100644
 --- a/battle-engine.js
 +++ b/battle-engine.js
-@@ -15,9 +15,9 @@ require('sugar');
- global.Config = require('./config/config.js');
+@@ -10,14 +10,14 @@
+  * @license MIT license
+  */
+ 
+-require('sugar');
++//require('sugar');
+ 
+-global.Config = require('./config/config.js');
++//global.Config = require('./config/config.js');
  
  // graceful crash - allow current battles to finish before restarting
 -process.on('uncaughtException', function (err) {
@@ -14,7 +21,48 @@ index c02272f..ac3954c 100644
  
  /**
   * Converts anything to an ID. An ID must have only lowercase alphanumeric
-@@ -72,7 +72,7 @@ var Battles = {};
+@@ -27,22 +27,22 @@ process.on('uncaughtException', function (err) {
+  * If an object with an ID is passed, its ID will be returned.
+  * Otherwise, an empty string will be returned.
+  */
+-global.toId = function (text) {
++/*global.toId = function (text) {
+ 	if (text && text.id) text = text.id;
+ 	else if (text && text.userid) text = text.userid;
+ 
+ 	return string(text).toLowerCase().replace(/[^a-z0-9]+/g, '');
+-};
++};*/
+ 
+ /**
+  * Validates a username or Pokemon nickname
+  */
+-global.toName = function (name) {
++/*global.toName = function (name) {
+ 	name = string(name);
+ 	name = name.replace(/[\|\s\[\]\,]+/g, ' ').trim();
+ 	if (name.length > 18) name = name.substr(0, 18).trim();
+ 	return name;
+-};
++};*/
+ 
+ /**
+  * Safely ensures the passed variable is a string
+@@ -50,18 +50,18 @@ global.toName = function (name) {
+  * If we're expecting a string and being given anything that isn't a string
+  * or a number, it's safe to assume it's an error, and return ''
+  */
+-global.string = function (str) {
++/*global.string = function (str) {
+ 	if (typeof str === 'string' || typeof str === 'number') return '' + str;
+ 	return '';
+-};
++};*/
+ 
+-global.Tools = require('./tools.js');
++//global.Tools = require('./tools.js');
+ 
+ var Battles = {};
  
  // Receive and process a message sent using Simulator.prototype.send in
  // another process.
@@ -23,10 +71,10 @@ index c02272f..ac3954c 100644
  	//console.log('CHILD MESSAGE RECV: "' + message + '"');
  	var nlIndex = message.indexOf("\n");
  	var more = '';
-@@ -93,9 +93,9 @@ process.on('message', function (message) {
+@@ -82,9 +82,9 @@ process.on('message', function (message) {
  
  				if (!require('./crashlogger.js')(fakeErr, 'A battle')) {
- 					var ministack = ("" + err.stack).split("\n").slice(0, 2).join("<br />");
+ 					var ministack = ("" + err.stack).escapeHTML().split("\n").slice(0, 2).join("<br />");
 -					process.send(data[0] + '\nupdate\n|html|<div class="broadcast-red"><b>A BATTLE PROCESS HAS CRASHED:</b> ' + ministack + '</div>');
 +					battleEngineFakeProcess.client.send(data[0] + '\nupdate\n|html|<div class="broadcast-red"><b>A BATTLE PROCESS HAS CRASHED:</b> ' + ministack + '</div>');
  				} else {
@@ -35,7 +83,16 @@ index c02272f..ac3954c 100644
  				}
  			}
  		}
-@@ -3773,7 +3773,7 @@ var Battle = (function () {
+@@ -1338,7 +1338,7 @@ var Battle = (function () {
+ 	var Battle = {};
+ 
+ 	Battle.construct = (function () {
+-		var battleProtoCache = {};
++		global.battleProtoCache = {};
+ 		return function (roomid, formatarg, rated) {
+ 			var battle = Object.create((function () {
+ 				if (battleProtoCache[formatarg] !== undefined) {
+@@ -3763,7 +3763,7 @@ var Battle = (function () {
  	// Simulator.prototype.receive in simulator.js (in another process).
  	Battle.prototype.send = function (type, data) {
  		if (Array.isArray(data)) data = data.join("\n");
@@ -45,10 +102,10 @@ index c02272f..ac3954c 100644
  	// This function is called by this process's 'message' event.
  	Battle.prototype.receive = function (data, more) {
 diff --git a/commands.js b/commands.js
-index 58ad6c0..8d24872 100644
+index 1965614..81fafde 100644
 --- a/commands.js
 +++ b/commands.js
-@@ -1021,11 +1021,12 @@ var commands = exports.commands = {
+@@ -1039,8 +1039,9 @@ var commands = exports.commands = {
  
  		} else if (target === 'battles') {
  
@@ -59,22 +116,21 @@ index 58ad6c0..8d24872 100644
 +			return this.sendReply("Battle hotpatching is not supported with the single process hack.");
  
  		} else if (target === 'formats') {
--			try {
-+			/*try {
- 				// uncache the tools.js dependency tree
- 				CommandParser.uncacheTree('./tools.js');
- 				// reload tools.js
-@@ -1042,7 +1043,8 @@ var commands = exports.commands = {
- 				return this.sendReply("Formats have been hotpatched.");
- 			} catch (e) {
- 				return this.sendReply("Something failed while trying to hotpatch formats: \n" + e.stack);
--			}
-+			}*/
-+			return this.sendReply("Formats hotpatching is not supported with the single process hack.");
- 
- 		} else if (target === 'learnsets') {
  			try {
-@@ -1153,9 +1155,9 @@ var commands = exports.commands = {
+@@ -1051,9 +1052,10 @@ var commands = exports.commands = {
+ 				// rebuild the formats list
+ 				Rooms.global.formatListText = Rooms.global.getFormatListText();
+ 				// respawn validator processes
+-				TeamValidator.ValidatorProcess.respawn();
++				//TeamValidator.ValidatorProcess.respawn();
++				battleProtoCache = {};
+ 				// respawn simulator processes
+-				Simulator.SimulatorProcess.respawn();
++				//Simulator.SimulatorProcess.respawn();
+ 				// broadcast the new formats list to clients
+ 				Rooms.global.send(Rooms.global.formatListText);
+ 
+@@ -1171,9 +1173,9 @@ var commands = exports.commands = {
  			return this.sendReply("Wait for /updateserver to finish before using /kill.");
  		}
  
@@ -184,7 +240,7 @@ index 32051a7..bd269e6 100644
  var slice = Array.prototype.slice;
  
 diff --git a/sockets.js b/sockets.js
-index ed17461..1cc0738 100644
+index 8eb8d3b..9dc947f 100644
 --- a/sockets.js
 +++ b/sockets.js
 @@ -11,19 +11,20 @@
@@ -327,7 +383,7 @@ index ed17461..1cc0738 100644
 -}
 +//}
 diff --git a/team-validator.js b/team-validator.js
-index 2a4a0aa..ecf8d10 100644
+index c321996..b2eee73 100644
 --- a/team-validator.js
 +++ b/team-validator.js
 @@ -7,7 +7,7 @@
@@ -416,7 +472,7 @@ index 2a4a0aa..ecf8d10 100644
  		if (typeof str === 'string' || typeof str === 'number') return '' + str;
  		return '';
  	};
-@@ -177,7 +186,7 @@ if (!process.send) {
+@@ -176,17 +185,16 @@ if (!process.send) {
  			respond(id, true, packedTeam);
  		}
  	});
@@ -425,7 +481,31 @@ index 2a4a0aa..ecf8d10 100644
  
  var Validator = (function () {
  	function Validator(format) {
-@@ -411,7 +420,7 @@ var Validator = (function () {
+-		this.format = Tools.getFormat(format);
+-		this.tools = Tools.mod(this.format);
++		this.format = format;
+ 	}
+ 
+ 	Validator.prototype.validateTeam = function (team) {
+-		var format = this.format;
+-		var tools = this.tools;
++		var format = Tools.getFormat(this.format);
++		var tools = Tools.mod(format);
+ 
+ 		var problems = [];
+ 		tools.getBanlistTable(format);
+@@ -255,8 +263,8 @@ var Validator = (function () {
+ 	};
+ 
+ 	Validator.prototype.validateSet = function (set, teamHas) {
+-		var format = this.format;
+-		var tools = this.tools;
++		var format = Tools.getFormat(this.format);
++		var tools = Tools.mod(format);
+ 
+ 		var problems = [];
+ 		if (!set) {
+@@ -420,7 +428,7 @@ var Validator = (function () {
  					clause = typeof banlistTable[check] === 'string' ? " by "+ banlistTable[check] : '';
  					problems.push(name + "'s move " + set.moves[i] + " is banned" + clause + ".");
  				}
@@ -434,6 +514,15 @@ index 2a4a0aa..ecf8d10 100644
  				if (banlistTable['Unreleased']) {
  					if (move.isUnreleased) problems.push(name + "'s move " + set.moves[i] + " is unreleased.");
  				}
+@@ -546,7 +554,7 @@ var Validator = (function () {
+ 	};
+ 
+ 	Validator.prototype.checkLearnset = function (move, template, lsetData) {
+-		var tools = this.tools;
++		var tools = Tools.mod(Tools.getFormat(format));
+ 
+ 		move = toId(move);
+ 		template = tools.getTemplate(template);
 diff --git a/verifier.js b/verifier.js
 index bb37be7..7e29f65 100644
 --- a/verifier.js
