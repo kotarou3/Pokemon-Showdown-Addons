@@ -1,525 +1,549 @@
-diff --git a/app.js b/app.js
-index 0cf2e13..88ef840 100644
---- a/app.js
-+++ b/app.js
-@@ -376,10 +376,12 @@ global.CommandParser = require('./command-parser.js');
- 
- global.Simulator = require('./simulator.js');
- 
- global.Tournaments = require('./tournaments/frontend.js');
- 
-+global.Clans = require('./clans.js');
-+
- try {
- 	global.Dnsbl = require('./dnsbl.js');
- } catch (e) {
- 	global.Dnsbl = {query:function (){}};
- }
-diff --git a/clans.js b/clans.js
+diff --git a/chat-plugins/clans.js b/chat-plugins/clans.js
 new file mode 100644
-index 0000000..466687b
+index 0000000..862d002
 --- /dev/null
-+++ b/clans.js
-@@ -0,0 +1,302 @@
-+const clanDataFile = './config/clans.json';
-+
-+var fs = require('fs');
++++ b/chat-plugins/clans.js
+@@ -0,0 +1,508 @@
 +var elo = require('elo-rank')();
 +
-+if (!fs.existsSync(clanDataFile))
-+	fs.writeFileSync(clanDataFile, '{}');
-+var clans = JSON.parse(fs.readFileSync(clanDataFile).toString());
-+var pendingWars = {};
-+
-+exports.clans = clans;
-+exports.pendingWars = pendingWars;
-+
-+function writeClanData() {
-+	fs.writeFileSync(clanDataFile, JSON.stringify(clans));
-+}
-+
-+exports.getClans = function () {
-+	return Object.keys(clans).map(function (c) { return clans[c].name; });
-+};
-+
-+exports.getClanName = function (clan) {
-+	var clanId = toId(clan);
-+	return clans[clanId] ? clans[clanId].name : "";
-+};
-+
-+exports.getRating = function (clan) {
-+	var clanId = toId(clan);
-+	if (!clans[clanId])
-+		return false;
-+
-+	return {
-+		wins: clans[clanId].wins,
-+		losses: clans[clanId].losses,
-+		draws: clans[clanId].draws,
-+		rating: clans[clanId].rating,
-+		ratingName: exports.ratingToName(clans[clanId].rating)
-+	};
-+};
-+
-+exports.ratingToName = function (rating) {
++function ratingToName(rating) {
 +	if (rating > 1500)
 +		return "Gold";
 +	else if (rating > 1200)
 +		return "Silver";
 +	else
 +		return "Bronze";
-+};
++}
 +
-+exports.createClan = function (name) {
-+	var id = toId(name);
-+	if (clans[id])
-+		return false;
++var getClan, War;
++var ClanRoom = exports.ClanRoom = (function () {
++	function ClanRoom(name, data) {
++		data = data || {};
++		data.isClanRoom = true;
++		if (!data.ratingData) {
++			data.ratingData = {
++				wins: 0,
++				losses: 0,
++				draws: 0,
++				rating: 1000
++			};
++		}
 +
-+	clans[id] = {
-+		name: name,
-+		members: {},
-+		wins: 0,
-+		losses: 0,
-+		draws: 0,
-+		rating: 1000
++		Rooms.ChatRoom.call(this, toId(name), name, data);
++
++		this.availableMembers = {};
++		this.challengesFrom = {};
++		this.challengeTo = null;
++	}
++	ClanRoom.prototype = Object.create(Rooms.ChatRoom.prototype);
++
++	ClanRoom.prototype.getRating = function () {
++		return {
++			wins: this.ratingData.wins,
++			losses: this.ratingData.losses,
++			draws: this.ratingData.draws,
++			rating: this.ratingData.rating,
++			ratingName: ratingToName(this.ratingData.rating)
++		};
 +	};
-+	writeClanData();
 +
-+	return true;
-+};
++	ClanRoom.prototype.setMemberAvailable = function (user) {
++		if (!this.auth || !this.auth[toId(user)]) return false;
++		var expiryTime = this.availableMembers[toId(user)] = Date.now() + (5).minutes();
++		return expiryTime;
++	};
++	ClanRoom.prototype.getAvailableMembers = function () {
++		this.pruneAvailableMembers();
++		return Object.keys(this.availableMembers);
++	};
++	ClanRoom.prototype.pruneAvailableMembers = function () {
++		for (var m in this.availableMembers) {
++			var user = Users.getExact(m);
++			if (this.availableMembers[m] < Date.now() || !this.auth[m] || !user || !user.connected) {
++				delete this.availableMembers[m];
++			}
++		}
++	};
++	ClanRoom.prototype.isEnoughAvailableMembers = function () {
++		this.pruneAvailableMembers();
++		if (Object.size(this.availableMembers) < 1) {
++			this.add("You do not have enough available members for a war. At least 4 is required.");
++			return false;
++		}
++		return true;
++	};
 +
-+exports.deleteClan = function (name) {
-+	var id = toId(name);
-+	if (!clans[id] || exports.findWarFromClan(id))
-+		return false;
++	ClanRoom.prototype.updateChallenges = function () {
++		if (this.challengeTo) {
++			var otherClan = getClan(this.challengeTo.to);
++			if (otherClan) {
++				this.add("You are challenging " + otherClan.title);
++			} else {
++				this.challengeTo = null;
++			}
++		}
 +
-+	delete clans[id];
-+	writeClanData();
++		var challengesFrom = [];
++		for (var c in this.challengesFrom) {
++			challengesFrom.push(this.challengesFrom[c].from);
++		}
++		if (challengesFrom.length > 0) this.add("You are being challenged by: " + challengesFrom.join(", "));
 +
-+	return true;
-+};
++		this.update();
++	};
++	ClanRoom.prototype.makeChallenge = function (otherClan, format) {
++		if (otherClan === this) return;
++		if (this.currentWar) return;
++		if (!this.isEnoughAvailableMembers()) return;
++		if (this.challengeTo) {
++			this.updateChallenges();
++			return;
++		}
 +
-+exports.getMembers = function (clan) {
-+	var clanId = toId(clan);
-+	if (!clans[clanId])
-+		return false;
++		var challenge = {
++			from: this.id,
++			to: otherClan.id,
++			format: format || ''
++		};
++		this.challengeTo = challenge;
++		otherClan.challengesFrom[this.id] = challenge;
 +
-+	return Object.keys(clans[clanId].members);
-+};
++		this.updateChallenges();
++		otherClan.updateChallenges();
++	};
++	ClanRoom.prototype.cancelChallengeTo = function () {
++		if (!this.challengeTo) return;
 +
-+exports.getAvailableMembers = function (clan) {
-+	var clanId = toId(clan);
-+	if (!clans[clanId])
-+		return false;
++		var otherClan = getClan(this.challengeTo.to);
++		this.challengeTo = null;
++		delete otherClan.challengesFrom[this.id];
 +
-+	var results = [];
-+	for (var m in clans[clanId].members) {
-+		var user = Users.getExact(m);
-+		if (user && user.connected && user.isClanWarAvailable > Date.now() - (5).minutes())
-+			results.push(m);
++		this.add("You have cancelled your challenge.");
++		otherClan.add("||" + this.title + " has cancelled their challenge.");
++
++		this.updateChallenges();
++		otherClan.updateChallenges();
++	};
++	ClanRoom.prototype.rejectChallengeFrom = function (otherClan) {
++		if (!this.challengesFrom[otherClan.id]) return;
++
++		delete this.challengesFrom[otherClan.id];
++		otherClan.challengeTo = null;
++
++		this.add("You have rejected " + otherClan.title + "'s challenge.");
++		otherClan.add("||" + this.title + " has rejected your challenge.");
++
++		this.updateChallenges();
++		otherClan.updateChallenges();
++	};
++	ClanRoom.prototype.acceptChallengeFrom = function (otherClan) {
++		if (!this.challengesFrom[otherClan.id]) return;
++		if (this.currentWar) return;
++		if (otherClan.currentWar) return;
++
++		if (!this.isEnoughAvailableMembers()) return;
++		if (!otherClan.isEnoughAvailableMembers()) {
++			this.add("The other clan currently do not have enough available members for a war.");
++			return;
++		}
++
++		var challenge = otherClan.challengeTo;
++		delete this.challengesFrom[otherClan.id];
++		otherClan.challengeTo = null;
++
++		this.updateChallenges();
++		otherClan.updateChallenges();
++
++		var allies = this.getAvailableMembers();
++		var opponents = otherClan.getAvailableMembers();
++		var matchupsCount = Math.min(allies.length, opponents.length);
++
++		var war = new War(otherClan, this, opponents.slice(0, matchupsCount), allies.slice(0, matchupsCount), challenge.format, otherClan, otherClan.onWarEnd.bind(otherClan));
++		this.currentWar = war;
++		otherClan.currentWar = war;
++	};
++
++	ClanRoom.prototype.onWarEnd = function (clanA, clanB, score) {
++		var expectedScore = elo.getExpected(clanA.ratingData.rating, clanB.ratingData.rating);
++		var oldRatingA = clanA.ratingData.rating;
++		var oldRatingB = clanB.ratingData.rating;
++		clanA.ratingData.rating = elo.updateRating(expectedScore, score, clanA.ratingData.rating);
++		clanB.ratingData.rating = elo.updateRating(1 - expectedScore, 1 - score, clanB.ratingData.rating);
++		if (clanA.ratingData.rating < 1000) clanA.ratingData.rating = 1000;
++		if (clanB.ratingData.rating < 1000) clanB.ratingData.rating = 1000;
++
++		if (score === 1) {
++			++clanA.ratingData.wins;
++			++clanB.ratingData.losses;
++		} else if (score === 0) {
++			++clanA.ratingData.losses;
++			++clanB.ratingData.wins;
++		} else {
++			++clanA.ratingData.draws;
++			++clanB.ratingData.draws;
++		}
++
++		Rooms.global.writeChatRoomData();
++
++		this.add("||" + clanA.title + " has " + (["lost", "won"][score] || "drawn") + " the clan war against " + clanB.title + ".");
++		this.add("|raw|<strong>" + Tools.escapeHTML(clanA.title) + ":</strong> " + oldRatingA + " &rarr; " + clanA.ratingData.rating + " (" + ratingToName(clanA.ratingData.rating) + ")");
++		this.add("|raw|<strong>" + Tools.escapeHTML(clanB.title) + ":</strong> " + oldRatingB + " &rarr; " + clanB.ratingData.rating + " (" + ratingToName(clanB.ratingData.rating) + ")");
++		this.update();
++
++		clanA.endCurrentWar();
++	};
++	ClanRoom.prototype.endCurrentWar = function () {
++		if (!this.currentWar) return;
++
++		var otherClan = this.currentWar.clanA === this ? this.currentWar.clanB : this.currentWar.clanA;
++		delete otherClan.currentWar;
++		delete this.currentWar;
++	};
++
++	ClanRoom.prototype.destroy = function () {
++		this.cancelChallengeTo();
++		for (var c in this.challengesFrom) this.rejectChallengeFrom(c);
++		this.endCurrentWar();
++
++		Rooms.ChatRoom.destroy.call(this);
++	};
++
++	return ClanRoom;
++})();
++
++var War = exports.War = (function () {
++	function War(clanA, clanB, battlersA, battlersB, format, room, onEnd) {
++		this.clanA = clanA;
++		this.clanB = clanB;
++		this.battlersA = battlersA.map(toId).randomize();
++		this.battlersB = battlersB.map(toId).randomize();
++		this.format = format;
++		this.room = room;
++		this.onEnd = onEnd;
++
++		this.matchups = {};
++		for (var b = 0; b < this.battlersA.length; ++b) {
++			var matchup = {from: this.battlersA[b], to: this.battlersB[b]};
++			this.matchups[this.battlersA[b]] = matchup;
++			this.matchups[this.battlersB[b]] = matchup;
++
++			Users.getExact(this.battlersA[b]).joinRoom(this.room);
++			Users.getExact(this.battlersB[b]).joinRoom(this.room);
++		}
++		this.remainingMatches = this.battlersA.length;
++
++		this.score = 0; // Positive: clanA winning; Negative: clanB winning
++
++		this.room.add('|raw|' +
++			"<strong>A clan war between  " + Tools.escapeHTML(this.clanA.title) + " and " + Tools.escapeHTML(this.clanB.title) + " has started!</strong><br />" +
++			this.getMatchups().map(function (matchup) {
++				return '<strong>' + Tools.escapeHTML(matchup.from) + "</strong> vs <strong>" + Tools.escapeHTML(matchup.to);
++			}).join('<br />')
++		);
++		this.room.update();
 +	}
 +
++	War.prototype.getMatchups = function () {
++		var matchups = [];
++		for (var m in this.matchups) {
++			if (this.matchups[m].from === m) {
++				matchups.push(this.matchups[m]);
++			}
++		}
++		return matchups;
++	};
++
++	War.prototype.onBattleWin = function (userA, userB, score, format) {
++		if (format !== this.format) return;
++
++		var userAId = toId(userA);
++		var userBId = toId(userB);
++
++		var matchup = this.matchups[userAId];
++		if (!matchup || (userBId !== matchup.from && userBId !== matchup.to) || matchup.isEnded) return;
++
++		matchup.isEnded = true;
++		--this.remainingMatches;
++
++		if (userAId === matchup.to) {
++			var tmp = userA;
++			userA = userB;
++			userB = tmp;
++			score = 1 - score;
++		}
++		this.score += (score - 0.5) * 2;
++
++		this.room.add("|raw|<strong>(" + Tools.escapeHTML(this.clanA.title) + " vs " + Tools.escapeHTML(this.clanB.title) + ") " + Tools.escapeHTML(userA.name) + " has " + (["lost", "won"][score] || "drawn") + " the clan war battle against " + Tools.escapeHTML(userB.name) + ".</strong>");
++		this.room.update();
++
++		if (this.remainingMatches === 0) {
++			var overallScore = (this.score && this.score / Math.abs(this.score)) / 2 + 0.5;
++			this.onEnd(this.clanA, this.clanB, overallScore);
++		}
++	};
++
++	War.prototype.isEnded = function () {
++		return this.remainingMatches === 0;
++	};
++
++	return War;
++})();
++
++var getClans = exports.getClans = function () {
++	var results = [];
++	for (var r in Rooms.rooms)
++		if (Rooms.rooms[r] instanceof ClanRoom)
++			results.push(Rooms.rooms[r]);
++	return results;
++};
++var getClan = exports.get = function (name) {
++	var room = Rooms.get(toId(name));
++	return room && room.isClanRoom ? room : null;
++};
++var getClansFromMember = exports.getFromMember = function (user) {
++	var results = [];
++	var userId = toId(user);
++	for (var r in Rooms.rooms)
++		if (Rooms.rooms[r] instanceof ClanRoom && Rooms.rooms[r].auth && Rooms.rooms[r].auth[userId])
++			results.push(Rooms.rooms[r]);
 +	return results;
 +};
 +
-+exports.findClanFromMember = function (user) {
-+	var userId = toId(user);
-+	for (var c in clans)
-+		if (clans[c].members[userId])
-+			return clans[c].name;
-+	return false;
++var createClan = exports.createClan = function (name) {
++	if (Rooms.get(toId(name))) return false;
++	return Rooms.global.addChatRoom(name, {isClanRoom: true});
++};
++var deleteClan = exports.deleteClan = function (name) {
++	var room = getClan(name);
++	if (!room) return false;
++	return Rooms.global.removeChatRoom(toId(name));
 +};
 +
-+exports.addMember = function (clan, user) {
-+	var clanId = toId(clan);
-+	var userId = toId(user);
-+	if (!clans[clanId] || exports.findClanFromMember(user))
-+		return false;
-+
-+	clans[clanId].members[userId] = 1;
-+	writeClanData();
-+
-+	return true;
-+};
-+
-+exports.removeMember = function (clan, user) {
-+	var clanId = toId(clan);
-+	var userId = toId(user);
-+	if (!clans[clanId] || !clans[clanId].members[userId])
-+		return false;
-+
-+	delete clans[clanId].members[userId];
-+	writeClanData();
-+
-+	return true;
-+};
-+
-+exports.getWars = function () {
-+	return Object.keys(pendingWars).map(function (clan) { return [clan, pendingWars[clan.against]]; });
-+};
-+
-+exports.getWarMatchups = function (clan) {
-+	var warringClans = exports.findWarFromClan(clan);
-+	if (!warringClans)
-+		return false;
-+
-+	return JSON.parse(JSON.stringify(pendingWars[warringClans[0]].matchups));
-+};
-+
-+exports.getWarRoom = function (clan) {
-+	var warringClans = exports.findWarFromClan(clan);
-+	if (!warringClans)
-+		return false;
-+
-+	return pendingWars[warringClans[0]].room;
++for (var r = 0; r < Rooms.global.chatRooms.length; ++r) {
++	var room = Rooms.global.chatRooms[r];
++	if (room.isClanRoom && !room.availableMembers) {
++		var newRoom = new ClanRoom(room.title, room.chatRoomData);
++		Rooms.global.chatRooms[r] = newRoom;
++		Rooms.rooms[room.id] = newRoom;
++	}
 +}
 +
-+exports.findWarFromClan = function (clan) {
-+	var clanId = toId(clan);
-+
-+	if (pendingWars[clanId])
-+		return [clanId, pendingWars[clanId].against];
-+	for (var w in pendingWars)
-+		if (pendingWars[w].against === clanId)
-+			return [w, clanId];
-+
-+	return false;
-+};
-+
-+exports.startWar = function (clanA, clanB, room) {
-+	var clanAId = toId(clanA);
-+	var clanBId = toId(clanB);
-+	if (!clans[clanAId] || !clans[clanBId] || exports.findWarFromClan(clanA) || exports.findWarFromClan(clanB))
-+		return false;
-+
-+	var clanAMembers = exports.getAvailableMembers(clanA).randomize();
-+	var clanBMembers = exports.getAvailableMembers(clanB).randomize();
-+	var memberCount = Math.min(clanAMembers.length, clanBMembers.length);
-+	if (memberCount < 4)
-+		return false;
-+
-+	var matchups = {};
-+	for (var m = 0; m < memberCount; ++m)
-+		matchups[toId(clanAMembers[m])] = {from: clanAMembers[m], to: clanBMembers[m]};
-+
-+	pendingWars[clanAId] = {
-+		against: clanBId,
-+		matchups: matchups,
-+		score: 0,
-+		room: room
-+	};
-+
-+	return JSON.parse(JSON.stringify(matchups));
-+};
-+
-+exports.endWar = function (clan) {
-+	var warringClans = exports.findWarFromClan(clan);
-+	if (!warringClans)
-+		return false;
-+
-+	delete pendingWars[warringClans[0]];
-+	return true;
-+};
-+
-+exports.setWarResult = function (clanA, clanB, result) {
-+	var clanAId = toId(clanA);
-+	var clanBId = toId(clanB);
-+	if (!clans[clanAId] || !clans[clanBId] || result < 0 || result > 1)
-+		return false;
-+
-+	var clanAExpectedResult = elo.getExpected(clans[clanAId].rating, clans[clanBId].rating);
-+	var clanBExpectedResult = elo.getExpected(clans[clanBId].rating, clans[clanAId].rating);
-+	clans[clanAId].rating = elo.updateRating(clanAExpectedResult, result, clans[clanAId].rating);
-+	clans[clanBId].rating = elo.updateRating(clanBExpectedResult, 1 - result, clans[clanBId].rating);
-+
-+	if (clans[clanAId].rating < 1000)
-+		clans[clanAId].rating = 1000;
-+	if (clans[clanBId].rating < 1000)
-+		clans[clanBId].rating = 1000;
-+
-+	if (result === 1) {
-+		++clans[clanAId].wins;
-+		++clans[clanBId].losses;
-+	} else if (result === 0) {
-+		++clans[clanAId].losses;
-+		++clans[clanBId].wins;
-+	} else {
-+		++clans[clanAId].draws;
-+		++clans[clanBId].draws;
++var oldWin = Rooms.BattleRoom.prototype.win;
++Rooms.BattleRoom.prototype.win = function (winner) {
++	var winnerId = toId(winner);
++	var score = 0.5;
++	if (winnerId === toId(this.p1)) {
++		score = 1;
++	} else if (winnerId === toId(this.p2)) {
++		score = 0;
 +	}
 +
-+	writeClanData();
-+
-+	return [clans[clanAId].rating, clans[clanBId].rating];
-+};
-+
-+exports.setWarMatchResult = function (userA, userB, result) {
-+	var userAId = toId(userA);
-+	var userBId = toId(userB);
-+
-+	if (typeof result !== 'number') {
-+		result = toId(result);
-+		if (result === userAId)
-+			result = 1;
-+		else if (result === userBId)
-+			result = 0;
-+		else
-+			result = 0.5;
++	var clans = getClansFromMember(this.p1);
++	for (var c = 0; c < clans.length; ++c) {
++		if (clans[c].currentWar) {
++			clans[c].currentWar.onBattleWin(this.p1, this.p2, score, this.format);
++		}
 +	}
 +
-+	var clanId = exports.findClanFromMember(userA);
-+	if (!clanId)
-+		return false;
-+	var warringClans = exports.findWarFromClan(clanId);
-+	if (!warringClans)
-+		return false;
-+	clanId = warringClans[0];
-+
-+	var matchup = pendingWars[clanId].matchups[userAId];
-+	if (!matchup || matchup.to !== userBId) {
-+		matchup = pendingWars[clanId].matchups[userBId];
-+		if (!matchup || matchup.to !== userAId)
-+			return false;
-+	}
-+	if (matchup.isEnded)
-+		return false;
-+
-+	matchup.isEnded = true;
-+	if (result !== 0 && result !== 1)
-+		return true;
-+
-+	var winnerUserId = result === 1 ? userAId : userBId;
-+	if (matchup.to === winnerUserId)
-+		--pendingWars[clanId].score;
-+	else
-+		++pendingWars[clanId].score;
-+
-+	return true;
++	return oldWin.call(this, winner);
 +};
 +
-+exports.isWarEnded = function (clan) {
-+	var warringClans = exports.findWarFromClan(clan);
-+	if (!warringClans)
-+		return true;
-+	var clanId = warringClans[0];
-+
-+	for (var m in pendingWars[clanId].matchups)
-+		if (!pendingWars[clanId].matchups[m].isEnded)
-+			return false;
-+
-+	var result = 0.5;
-+	if (pendingWars[clanId].score > 0)
-+		result = 1;
-+	else if (pendingWars[clanId].score < 0)
-+		result = 0;
-+
-+	var oldRatings = [clans[warringClans[0]].rating, clans[warringClans[1]].rating];
-+	var newRatings = exports.setWarResult(warringClans[0], warringClans[1], result);
-+
-+	delete pendingWars[clanId];
-+	return {
-+		result: result,
-+		oldRatings: oldRatings,
-+		newRatings: newRatings
-+	};
-+};
-diff --git a/config/commands.js b/config/commands.js
-index 88e0117..6cf126c 100644
---- a/config/commands.js
-+++ b/config/commands.js
-@@ -1261,10 +1261,154 @@ var commands = exports.commands = {
- 			}
- 		};
- 	})(),
- 
- 	/*********************************************************
-+	 * Clan commands
-+	 *********************************************************/
-+
-+	clanshelp: function () {
-+		if (!this.canBroadcast()) return false;
++exports.namespace = ['clan', 'clans'];
++exports.defaultHandler = '';
++exports.commands = {
++	help: function () {
++		if (!this.canBroadcast()) return;
 +		this.sendReplyBox(
 +			"/clans [name] - Gets information about all clans, or about the specified clan<br />" +
-+			"/clanwaravailable - Sets yourself as available for clan wars for 5 minutes<br />" +
-+			"/createclan &lt;name> - Creates a clan<br />" +
-+			"/deleteclan &lt;name> - Deletes a clan<br />" +
-+			"/addclanmember &lt;clan>, &lt;user> - Adds a user to a clan<br />" +
-+			"/removeclanmember &lt;clan>, &lt;user> - Removes a user from a clan<br />" +
-+			"/startclanwar &lt;clan 1>, &lt;clan 2> - Starts a war between two clans<br />" +
-+			"/endclanwar &lt;clan> - Ends a clan war forcibly<br />" +
-+			"/getclanwarmatchups &lt;clan> - Shows the war battles that haven't yet been started<br />"
++			"/clan waravailable - Sets yourself as available for clan wars for 5 minutes<br />" +
++			"/clan create &lt;name> - Creates a clan<br />" +
++			"/clan delete &lt;name> - Deletes a clan<br />" +
++			"/clan challenge &lt;clan> - Challenge another clan<br />" +
++			"/clan cancelchallenge - Cancel your challenge<br />" +
++			"/clan accept &lt;clan> - Accept &lt;clan>'s challenge<br />" +
++			"/clan reject &lt;clan> - Reject &lt;clan>'s challenge<br />" +
++			"/clan endwar- Ends the current war forcibly<br />" +
++			"/clan matchups - Shows the war battles that haven't yet been started<br />"
 +		);
 +	},
 +
-+	createclan: function (target) {
-+		if (!this.can('clans')) return false;
-+		if (target.length < 2)
-+			this.sendReply("The clan's name is too short.");
-+		else if (!Clans.createClan(target))
-+			this.sendReply("Could not create the clan. Does it already exist?");
-+		else
-+			this.sendReply("Clan: " + target + " successfully created.");
-+	},
++	'': function (target, room, user, connection, cmd) {
++		if (!this.canBroadcast()) return;
++		target = target || cmd;
 +
-+	deleteclan: function (target) {
-+		if (!this.can('clans')) return false;
-+		if (!Clans.deleteClan(target))
-+			this.sendReply("Could not delete the clan. Does it exist or is it currently in a war?");
-+		else
-+			this.sendReply("Clan: " + target + " successfully deleted.");
-+	},
-+
-+	clan: 'getclans',
-+	clans: 'getclans',
-+	getclan: 'getclans',
-+	getclans: function (target) {
-+		if (!this.canBroadcast()) return false;
-+
-+		var clan = Clans.getRating(target);
-+		if (!clan) {
-+			target = Clans.findClanFromMember(target);
-+			if (target)
-+				clan = Clans.getRating(target);
++		var clans = [getClan(target)];
++		if (!clans[0]) clans = getClansFromMember(target);
++		if (!clans[0] && target.length > 0) {
++			clans = [];
++			var allClans = getClans();
++			var targetId = toId(target);
++			for (var c = 0; c < allClans.length; ++c) {
++				if (allClans[c].id.slice(0, targetId.length) === targetId) {
++					clans.push(allClans[c]);
++				}
++			}
 +		}
-+		if (!clan) {
++		if (!clans[0] && target.length > 0) return this.sendReply("No clan or clan member found under '" + target + "'.");
++
++		if (!clans[0]) {
 +			this.sendReplyBox(
 +				"<strong>Clans:</strong><br />" +
-+				Clans.getClans().map(function (clan) {
-+					var result = Clans.getRating(clan);
-+					result.name = clan;
++				getClans().map(function (clan) {
++					var result = clan.getRating();
++					result.name = clan.title;
++					result.id = clan.id;
 +					return result;
 +				}).sort(function (a, b) {
 +					return b.rating - a.rating;
 +				}).map(function (clan) {
-+					return '<strong>' + Tools.escapeHTML(clan.name) + ':</strong> ' + clan.ratingName + " (" + clan.rating + ") " + clan.wins + "/" + clan.losses + "/" + clan.draws;
++					return '<a class="ilink" href="/' + clan.id + '"><strong>' + Tools.escapeHTML(clan.name) + ':</strong></a> ' + clan.rating + " (" + clan.ratingName + ") " + clan.wins + "/" + clan.losses + "/" + clan.draws;
 +				}).join('<br />')
 +			);
 +			return;
 +		}
 +
-+		this.sendReplyBox(
-+			'<strong>' + Tools.escapeHTML(Clans.getClanName(target)) + '</strong><br />' +
-+			"<strong>Rating:</strong> " + clan.ratingName + " (" + clan.rating + ")<br />" +
-+			"<strong>Wins/Losses/Draws:</strong> " + clan.wins + "/" + clan.losses + "/" + clan.draws + '<br />' +
-+			"<strong>Members:</strong> " + Tools.escapeHTML(Clans.getMembers(target).sort().join(", "))
-+		);
-+	},
-+
-+	addclanmember: function (target) {
-+		if (!this.can('clans')) return false;
-+		var params = target.split(',');
-+		if (params.length !== 2) return this.sendReply("Usage: /addclanmember clan, member");
-+
-+		var user = Users.getExact(params[1]);
-+		if (!user || !user.connected) return this.sendReply("User: " + params[1] + " is not online.");
-+
-+		if (!Clans.addMember(params[0], params[1]))
-+			this.sendReply("Could not add the user to the clan. Does the clan exist or is the user already in another clan?");
-+		else {
-+			this.sendReply("User: " + user.name + " successfully added to the clan.");
-+			Rooms.rooms.lobby.add('|raw|<div class="clans-user-join">' + Tools.escapeHTML(user.name) + " has joined clan: " + Tools.escapeHTML(Clans.getClanName(params[0])) + '</div>');
++		clans = clans.sort(function (a, b) {
++			return a.id.localeCompare(b.id);
++		});
++		for (var c = 0; c < clans.length; ++c) {
++			var clan = clans[c];
++			var rating = clan.getRating();
++			this.sendReplyBox(
++				'<h1>' + Tools.escapeHTML(clan.title) + '</h1>' +
++				(clan.introMessage || '') +
++				'<hr />' +
++				"<strong>Rating:</strong> " + rating.rating + " (" + rating.ratingName + ")<br />" +
++				"<strong>Wins/Losses/Draws:</strong> " + rating.wins + "/" + rating.losses + "/" + rating.draws + '<br />' +
++				"<strong>Members:</strong> " + Tools.escapeHTML(Object.keys(clan.auth || {}).sort().join(", ")) + '<br />' +
++				"<button name=\"joinRoom\" value=\"" + clan.id + "\">Join</button>"
++			);
 +		}
 +	},
 +
-+	removeclanmember: function (target) {
-+		if (!this.can('clans')) return false;
-+		var params = target.split(',');
-+		if (params.length !== 2) return this.sendReply("Usage: /removeclanmember clan, member");
-+
-+		if (!Clans.removeMember(params[0], params[1]))
-+			this.sendReply("Could not remove the user from the clan. Does the clan exist or has the user already been removed from it?");
-+		else {
-+			this.sendReply("User: " + params[1] + " successfully removed from the clan.");
-+			Rooms.rooms.lobby.add('|raw|<div class="clans-user-join">' + Tools.escapeHTML(params[1]) + " has left clan: " + Tools.escapeHTML(Clans.getClanName(params[0])) + '</div>');
++	create: function (target) {
++		if (!this.can('makeroom')) return;
++		if (target.length < 2) {
++			this.sendReply("The clan's name is too short.");
++		} else if (!createClan(target)) {
++			this.sendReply("Could not create the clan. Does a room by it's name already exist?");
++		} else {
++			this.sendReply("Clan: " + target + " successfully created.");
 +		}
 +	},
 +
-+	clanwaravailable: function (target, room, user) {
-+		user.isClanWarAvailable = Date.now();
-+		this.sendReply("You have been marked available for clan wars for 5 minutes.");
++	delete: function (target) {
++		if (!this.can('makeroom')) return;
++		if (!deleteClan(target)) {
++			this.sendReply("Could not delete the clan. Did you spell it correctly?");
++		} else {
++			this.sendReply("Clan: " + target + " successfully deleted.");
++		}
 +	},
 +
-+	startclanwar: function (target, room) {
-+		if (!this.can('clans')) return false;
-+		var params = target.split(',');
-+		if (params.length !== 2) return this.sendReply("Usage: /startclanwar clan 1, clan 2");
-+
-+		var matchups = Clans.startWar(params[0], params[1], room);
-+		if (!matchups) return this.sendReply("Could not start the war. Do the two clans exist and have enough available members? Get the members to do /clanwaravailable");
-+
-+		room.add('|raw|' +
-+			"<div class=\"clans-war-start\">A clan war between " + Tools.escapeHTML(Clans.getClanName(params[0])) + " and	" + Tools.escapeHTML(Clans.getClanName(params[1])) + " has started!</div>" +
-+			Object.keys(matchups).map(function (m) { return "<strong>" + Tools.escapeHTML(matchups[m].from) + "</strong> vs <strong>" + Tools.escapeHTML(matchups[m].to); }).join('<br />')
-+		);
++	waravailable: function (target, room, user) {
++		if (!room.isClanRoom) return this.sendReply("This is not a clan room.");
++		var expiryTime = room.setMemberAvailable(user);
++		if (!expiryTime) return this.sendReply("You are not a member of this clan.");
++		this.sendReply("You have been marked available for this clan's wars for " + (expiryTime - Date.now()).duration() + ".");
 +	},
 +
-+	endclanwar: function (target) {
-+		if (!this.can('clans')) return false;
-+		var war = Clans.findWarFromClan(target);
-+		if (!war) return this.sendReply("The clan war does not exist. Has it already ended?");
++	challenge: function (target, room) {
++		if (!room.isClanRoom) return this.sendReply("This is not a clan room.");
++		if (!this.can('clans', room)) return;
++		if (room.currentWar) return this.sendReply("You are already at war.");
 +
-+		var room = Clans.getWarRoom(target);
-+		Clans.endWar(target);
-+		room.add("|raw|<div class=\"clans-war-end\">The clan war between " + Tools.escapeHTML(war[0]) + " and " + Tools.escapeHTML(war[1]) + " has been forcibly ended.</div>");
-+		this.sendReply("The clan war has been ended.");
++		var otherClan = getClan(target);
++		if (!otherClan) return this.sendReply("The clan does not exist.");
++		if (otherClan === room) return this.sendReply("You cannot challenge your own clan.");
++
++		room.makeChallenge(otherClan, 'ou');
 +	},
 +
-+	getclanwarmatchups: function (target) {
-+		if (!this.canBroadcast()) return false;
-+		var war = Clans.findWarFromClan(target);
-+		if (!war) return this.sendReply("The clan war does not exist.");
++	cancelchallenge: function (target, room) {
++		if (!room.isClanRoom) return this.sendReply("This is not a clan room.");
++		if (!this.can('clans', room)) return;
++		if (!room.challengeTo) return this.sendReply("This clan isn't currently challenging anyone.");
 +
-+		var matchups = Clans.getWarMatchups(target);
++		room.cancelChallengeTo();
++	},
++
++	accept: function (target, room) {
++		if (!room.isClanRoom) return this.sendReply("This is not a clan room.");
++		if (!this.can('clans', room)) return;
++		if (room.currentWar) return this.sendReply("You are already at war.");
++
++		var otherClan = getClan(target);
++		if (!otherClan) return this.sendReply("The clan does not exist");
++		if (!room.challengesFrom[otherClan.id]) return this.sendReply("||" + otherClan.title + " is not challenging you right now.");
++
++		room.acceptChallengeFrom(otherClan);
++	},
++
++	reject: function (target, room) {
++		if (!room.isClanRoom) return this.sendReply("This is not a clan room.");
++		if (!this.can('clans', room)) return;
++
++		var otherClan = getClan(target);
++		if (!otherClan) return this.sendReply("The clan does not exist");
++
++		room.rejectChallengeFrom(otherClan);
++	},
++
++	endwar: function (target, room) {
++		if (!room.isClanRoom) return this.sendReply("This is not a clan room.");
++		if (!this.can('clans', room)) return;
++		if (!room.currentWar) return this.sendReply("This clan currently isn't at war.");
++		if (room.currentWar.room !== room) return this.sendReply("This room is not hosting a war.");
++
++		room.endCurrentWar();
++		room.add("The clan war was forcibly ended.");
++	},
++
++	matchups: function (target, room) {
++		if (!this.canBroadcast()) return;
++		if (!room.isClanRoom) return this.sendReply("This is not a clan room.");
++		if (!room.currentWar) return this.sendReply("This clan currently isn't at war.");
++
 +		this.sendReplyBox(
-+			"<strong>Clan war matchups between " + Tools.escapeHTML(war[0]) + " and " + Tools.escapeHTML(war[1]) + ':</strong><br />' +
-+			Object.keys(matchups).map(function (m) { return matchups[m].isEnded ? "" : '<strong>' + Tools.escapeHTML(matchups[m].from) + "</strong> vs <strong>" + Tools.escapeHTML(matchups[m].to); }).join('<br />')
++			"<strong>Clan war matchups between " + Tools.escapeHTML(room.currentWar.clanA.title) + " and " + Tools.escapeHTML(room.currentWar.clanB.title) + ':</strong><br />' +
++			room.currentWar.getMatchups().map(function (matchup) {
++				return matchup.isEnded ? "" : '<strong>' + Tools.escapeHTML(matchup.from) + "</strong> vs <strong>" + Tools.escapeHTML(matchup.to);
++			}).join('<br />')
 +		);
 +	},
-+
-+	/*********************************************************
- 	 * Help commands
- 	 *********************************************************/
- 
- 	commands: 'help',
- 	h: 'help',
-diff --git a/rooms.js b/rooms.js
-index 090d383..bca8371 100644
---- a/rooms.js
-+++ b/rooms.js
-@@ -564,10 +564,36 @@ var BattleRoom = (function () {
- 		} else {
- 			this.log = this.log.concat(message);
++};
+diff --git a/package.json b/package.json
+index c3ef000..d12ff3e 100644
+--- a/package.json
++++ b/package.json
+@@ -3,11 +3,12 @@
+   "version": "0.9.2",
+   "dependencies": {
+     "sugar": "1.4.1",
+     "node-static": "0.7.4",
+     "sockjs": "0.3.9",
+-    "es6-shim": "0.16.0"
++    "es6-shim": "0.16.0",
++    "elo-rank": "0.2.2"
+   },
+   "optionalDependencies": {
+     "nodemailer": "0.4.1",
+     "http-proxy": "0.10.0"
+   },
+diff --git a/users.js b/users.js
+index 0ef4fa9..59e74d7 100644
+--- a/users.js
++++ b/users.js
+@@ -510,11 +510,11 @@ User = (function () {
+ 		var room = Rooms.rooms[roomid];
+ 		if (room && room.auth) {
+ 			if (room.auth[this.userid]) {
+ 				return room.auth[this.userid] + this.name;
+ 			}
+-			if (room.isPrivate) {
++			if (room.isPrivate || room.isClanRoom) {
+ 				return Config.groups.default[room.type + 'Room'] + this.name;
+ 			}
  		}
+ 		return this.group + this.name;
  	};
- 	BattleRoom.prototype.win = function (winner) {
-+		if (Clans.setWarMatchResult(this.p1, this.p2, winner)) {
-+			var result = "drawn";
-+			if (toId(winner) === toId(this.p1))
-+				result = "won";
-+			else if (toId(winner) === toId(this.p2))
-+				result = "lost";
-+
-+			var war = Clans.findWarFromClan(Clans.findClanFromMember(this.p1));
-+			Clans.getWarRoom(war[0]).add('|raw|<div class="clans-war-battle-result">(' + Tools.escapeHTML(war[0]) + " vs " + Tools.escapeHTML(war[1]) + ") " + Tools.escapeHTML(this.p1) + " has " + result + " the clan war battle against " + Tools.escapeHTML(this.p2) + '</div>');
-+
-+			var room = Clans.getWarRoom(war[0]);
-+			var warEnd = Clans.isWarEnded(war[0]);
-+			if (warEnd) {
-+				result = "drawn";
-+				if (warEnd.result === 1)
-+					result = "won";
-+				else if (warEnd.result === 0)
-+					result = "lost";
-+				room.add('|raw|' +
-+					'<div class="clans-war-end">' + Tools.escapeHTML(war[0]) + " has " + result + " the clan war against " + Tools.escapeHTML(war[1]) + '</div>' +
-+					'<strong>' + Tools.escapeHTML(war[0]) + ':</strong> ' + warEnd.oldRatings[0] + " &rarr; " + warEnd.newRatings[0] + " (" + Clans.ratingToName(warEnd.newRatings[0]) + ")<br />" +
-+					'<strong>' + Tools.escapeHTML(war[1]) + ':</strong> ' + warEnd.oldRatings[1] + " &rarr; " + warEnd.newRatings[1] + " (" + Clans.ratingToName(warEnd.newRatings[1]) + ")"
-+				);
-+			}
-+		}
-+
- 		if (this.rated) {
- 			var winnerid = toId(winner);
- 			var rated = this.rated;
- 			this.rated = false;
- 			var p1score = 0.5;
