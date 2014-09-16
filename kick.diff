@@ -18,7 +18,7 @@ index f1ceaed..72778a7 100644
 +		if (!targetUser || !targetUser.connected) {
 +			return this.sendReply("User " + this.targetUsername + " not found.");
 +		}
-+		if (!this.can('kick', targetUser, room)) return false;
++		if (!this.can('kick', targetUser)) return false;
 +		var msg = "kicked by " + user.name + (target ? " (" + target + ")" : "") + ".";
 +		this.addModCommand("" + targetUser.name + " was " + msg);
 +		targetUser.popup("You have been " + msg);
