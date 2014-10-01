@@ -519,7 +519,7 @@ index 0000000..6e0f534
 +				return matchup.isEnded ? "" : '<strong>' + Tools.escapeHTML(matchup.from) + "</strong> vs <strong>" + Tools.escapeHTML(matchup.to);
 +			}).join('<br />')
 +		);
-+	},
++	}
 +};
 diff --git a/package.json b/package.json
 index c3ef000..d12ff3e 100644
