@@ -25,10 +25,14 @@ class RoomGamePlayer {
 		this.name = user.name;
 		this.game = game;
 		user.games[this.game.id] = this.game;
+		user.updateSearch();
 	}
 	destroy() {
 		let user = Users.getExact(this.userid);
-		if (user) delete user.games[this.game.id];
+		if (user) {
+			delete user.games[this.game.id];
+			user.updateSearch();
+		}
 	}
 
 	toString() {
@@ -49,6 +53,7 @@ class RoomGame {
 	constructor(room) {
 		this.id = room.id;
 		this.room = room;
+		this.gameid = 'game';
 		this.title = 'Game';
 		this.allowRenames = false;
 		this.players = Object.create(null);
@@ -123,7 +128,7 @@ class RoomGame {
 	// need to handle the other events.
 
 	onUpdateConnection(user, connection) {
-		this.onConnect(user, connection);
+		if (this.onConnect) this.onConnect(user, connection);
 	}
 }
 

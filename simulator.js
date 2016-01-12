@@ -81,6 +81,7 @@ class BattlePlayer {
 		this.name = user.name;
 		this.game = game;
 		user.games[this.game.id] = this.game;
+		user.updateSearch();
 
 		this.slot = slot;
 		this.slotNum = Number(slot.charAt(1)) - 1;
@@ -88,7 +89,7 @@ class BattlePlayer {
 
 		for (let i = 0; i < user.connections.length; i++) {
 			let connection = user.connections[i];
-			Sockets.subchannelMove(connection.worker, this.id, this.slotNum + 1, connection.socketid);
+			Sockets.subchannelMove(connection.worker, this.game.id, this.slotNum + 1, connection.socketid);
 		}
 	}
 	destroy() {
@@ -96,12 +97,24 @@ class BattlePlayer {
 		let user = Users(this.userid);
 		if (user) {
 			delete user.games[this.game.id];
+			user.updateSearch();
 			for (let j = 0; j < user.connections.length; j++) {
 				let connection = user.connections[j];
-				Sockets.subchannelMove(connection.worker, this.id, '0', connection.socketid);
+				Sockets.subchannelMove(connection.worker, this.game.id, '0', connection.socketid);
 			}
 		}
 		this.game[this.slot] = null;
+	}
+	updateSubchannel(user) {
+		if (!user.connections) {
+			// "user" is actually a connection
+			Sockets.subchannelMove(user.worker, this.game.id, this.slotNum + 1, user.socketid);
+			return;
+		}
+		for (let i = 0; i < user.connections.length; i++) {
+			let connection = user.connections[i];
+			Sockets.subchannelMove(connection.worker, this.game.id, this.slotNum + 1, connection.socketid);
+		}
 	}
 
 	toString() {
@@ -128,7 +141,8 @@ class Battle {
 
 		this.id = room.id;
 		this.room = room;
-		this.title = "Battle";
+		this.title = Tools.getFormat(format).name;
+		if (!this.title.endsWith(" Battle")) this.title += " Battle";
 		this.allowRenames = !rated;
 
 		this.format = toId(format);
@@ -197,6 +211,7 @@ class Battle {
 			if (!this.ended) {
 				this.ended = true;
 				this.room.win(lines[2]);
+				this.removeAllPlayers();
 			}
 			break;
 
@@ -227,11 +242,11 @@ class Battle {
 			break;
 
 		case 'inactiveside':
-			this.inactiveSide = parseInt(lines[2], 10);
+			this.inactiveSide = parseInt(lines[2]);
 			break;
 
 		case 'score':
-			this.score = [parseInt(lines[2], 10), parseInt(lines[3], 10)];
+			this.score = [parseInt(lines[2]), parseInt(lines[3])];
 			break;
 		}
 		Monitor.activeIp = null;
@@ -243,6 +258,7 @@ class Battle {
 		// the battle
 		let player = this.players[user];
 		if (!player) return;
+		player.updateSubchannel(connection || user);
 		let request = this.requests[player.slot];
 		if (request) {
 			(connection || user).sendTo(this.id, '|request|' + request);
@@ -252,8 +268,9 @@ class Battle {
 		this.onConnect(user, connection);
 	}
 	onRename(user, oldid) {
+		if (user.userid === oldid) return;
 		let player = this.players[oldid];
-		if (player && user.userid !== oldid) {
+		if (player) {
 			if (!this.allowRenames && user.userid !== oldid) {
 				this.room.forfeit(user, " forfeited by changing their name.");
 				return;
@@ -266,7 +283,7 @@ class Battle {
 				player.simSend('rename', user.name, user.avatar);
 			}
 		}
-		if (user in this.players) {
+		if (!player && user in this.players) {
 			// this handles a user renaming themselves into a user in the
 			// battle (e.g. by using /nick)
 			this.onConnect(user);
@@ -276,7 +293,7 @@ class Battle {
 		let player = this.players[user];
 		if (player && !player.active) {
 			player.active = true;
-			player.simSend('join', user.name);
+			player.simSend('join', user.name, user.avatar);
 		}
 	}
 	onLeave(user) {
@@ -335,6 +352,14 @@ class Battle {
 		delete this.players[user.userid];
 		this.playerCount--;
 		return true;
+	}
+
+	removeAllPlayers() {
+		for (let i in this.players) {
+			this.players[i].destroy();
+			delete this.players[i];
+			this.playerCount--;
+		}
 	}
 
 	destroy() {

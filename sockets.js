@@ -20,7 +20,7 @@ let fakeProcess = new (require('./fake-process').FakeProcess)();
 
 /*if (cluster.isMaster) {
 	cluster.setupMaster({
-		exec: require('path').resolve(__dirname, 'sockets.js')
+		exec: require('path').resolve(__dirname, 'sockets.js'),
 	});*/
 
 	let workers = exports.workers = {};
@@ -61,21 +61,39 @@ let fakeProcess = new (require('./fake-process').FakeProcess)();
 		});
 	};
 
-	//let workerCount = typeof Config.workers !== 'undefined' ? Config.workers : 1;
-	//for (let i = 0; i < workerCount; i++) {
-		spawnWorker();
-	//}
+	exports.listen = function (port, bindAddress, workerCount) {
+		if (port !== undefined && !isNaN(port)) {
+			Config.port = port;
+			Config.ssl = null;
+		} else {
+			port = Config.port;
+			// Autoconfigure the app when running in cloud hosting environments:
+			try {
+				let cloudenv = require('cloud-env');
+				bindAddress = cloudenv.get('IP', bindAddress);
+				port = cloudenv.get('PORT', port);
+			} catch (e) {}
+		}
+		if (bindAddress !== undefined) {
+			Config.bindAddress = bindAddress;
+		}
+		if (workerCount === undefined) {
+			workerCount = (Config.workers !== undefined ? Config.workers : 1);
+		}
+		//for (let i = 0; i < workerCount; i++) {
+			spawnWorker();
+		//}
+	};
 
 	exports.killWorker = function (worker) {
 		/*let idd = worker.id + '-';
 		let count = 0;
-		for (let connectionid in Users.connections) {
+		Users.connections.forEach(function (connection, connectionid) {
 			if (connectionid.substr(idd.length) === idd) {
-				let connection = Users.connections[connectionid];
 				Users.socketDisconnect(worker, worker.id, connection.socketid);
 				count++;
 			}
-		}
+		});
 		try {
 			worker.kill();
 		} catch (e) {}
@@ -209,7 +227,7 @@ let fakeProcess = new (require('./fake-process').FakeProcess)();
 			if (severity === 'error') console.log('ERROR: ' + message);
 		},
 		prefix: '/showdown',
-		websocket: !Config.disableWebsocket
+		websocket: !Config.disableWebsocket,
 	});
 
 	let sockets = {};
@@ -355,19 +373,19 @@ let fakeProcess = new (require('./fake-process').FakeProcess)();
 				switch (subchannel ? subchannel[socketid] : '0') {
 				case '1':
 					if (!messages[1]) {
-						messages[1] = message.replace(/\n\|split\n[^\n]*\n([^\n]*)\n[^\n]*\n[^\n]*/g, '\n$1\n');
+						messages[1] = message.replace(/\n\|split\n[^\n]*\n([^\n]*)\n[^\n]*\n[^\n]*/g, '\n$1');
 					}
 					channel[socketid].write(messages[1]);
 					break;
 				case '2':
 					if (!messages[2]) {
-						messages[2] = message.replace(/\n\|split\n[^\n]*\n[^\n]*\n([^\n]*)\n[^\n]*/g, '\n$1\n');
+						messages[2] = message.replace(/\n\|split\n[^\n]*\n[^\n]*\n([^\n]*)\n[^\n]*/g, '\n$1');
 					}
 					channel[socketid].write(messages[2]);
 					break;
 				default:
 					if (!messages[0]) {
-						messages[0] = message.replace(/\n\|split\n([^\n]*)\n[^\n]*\n[^\n]*\n[^\n]*/g, '\n$1\n');
+						messages[0] = message.replace(/\n\|split\n([^\n]*)\n[^\n]*\n[^\n]*\n[^\n]*/g, '\n$1');
 					}
 					channel[socketid].write(messages[0]);
 					break;

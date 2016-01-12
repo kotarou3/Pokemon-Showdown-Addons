@@ -7,8 +7,8 @@
 
 const permission = 'announce';
 
-let Poll = (function () {
-	function Poll(room, question, options) {
+class Poll {
+	constructor(room, question, options) {
 		if (room.pollNumber) {
 			room.pollNumber++;
 		} else {
@@ -28,7 +28,7 @@ let Poll = (function () {
 		}
 	}
 
-	Poll.prototype.vote = function (user, option) {
+	vote(user, option) {
 		let ip = user.latestIp;
 		let userid = user.userid;
 
@@ -42,9 +42,9 @@ let Poll = (function () {
 		this.totalVotes++;
 
 		this.update();
-	};
+	}
 
-	Poll.prototype.blankvote = function (user, option) {
+	blankvote(user, option) {
 		let ip = user.latestIp;
 		let userid = user.userid;
 
@@ -56,19 +56,20 @@ let Poll = (function () {
 		}
 
 		this.update();
-	};
+	}
 
-	Poll.prototype.generateVotes = function () {
+	generateVotes() {
 		let output = '<div class="infobox"><p style="margin: 2px 0 5px 0"><span style="border:1px solid #6A6;color:#484;border-radius:4px;padding:0 3px"><i class="fa fa-bar-chart"></i> Poll</span> <strong style="font-size:11pt">' + Tools.escapeHTML(this.question) + '</strong></p>';
 		this.options.forEach(function (option, number) {
-			output += '<div style="margin-top: 3px"><button value="/poll vote ' + number + '" name="send" title="Vote for ' + number + '. ' + Tools.escapeHTML(option.name) + '">' + number + '. <strong>' + Tools.escapeHTML(option.name) + '</strong></button></div>';
+			output += '<div style="margin-top: 5px"><button value="/poll vote ' + number + '" name="send" title="Vote for ' + number + '. ' + Tools.escapeHTML(option.name) + '">' + number + '. <strong>' + Tools.escapeHTML(option.name) + '</strong></button></div>';
 		});
+		output += '<div style="margin-top: 7px; padding-left: 12px"><button value="/poll results" name="send" title="View results - you will not be able to vote after viewing results"><small>(View results)</small></button></div>';
 		output += '</div>';
 
 		return output;
-	};
+	}
 
-	Poll.prototype.generateResults = function (ended, option) {
+	generateResults(ended, option) {
 		let icon = '<span style="border:1px solid #' + (ended ? '777;color:#555' : '6A6;color:#484') + ';border-radius:4px;padding:0 3px"><i class="fa fa-bar-chart"></i> ' + (ended ? "Poll ended" : "Poll") + '</span>';
 		let output = '<div class="infobox"><p style="margin: 2px 0 5px 0">' + icon + ' <strong style="font-size:11pt">' + Tools.escapeHTML(this.question) + '</strong></p>';
 		let iter = this.options.entries();
@@ -85,9 +86,9 @@ let Poll = (function () {
 		output += '</div>';
 
 		return output;
-	};
+	}
 
-	Poll.prototype.update = function () {
+	update() {
 		let results = [];
 
 		for (let i = 0; i <= this.options.size; i++) {
@@ -103,9 +104,9 @@ let Poll = (function () {
 				user.sendTo(this.room, '|uhtmlchange|poll' + this.room.pollNumber + '|' + results[this.voterIps[user.latestIp]]);
 			}
 		}
-	};
+	}
 
-	Poll.prototype.display = function (user, broadcast) {
+	display() {
 		let votes = this.generateVotes();
 
 		let results = [];
@@ -114,16 +115,8 @@ let Poll = (function () {
 			results.push(this.generateResults(false, i));
 		}
 
-		let target = {};
-
-		if (broadcast) {
-			target = this.room.users;
-		} else {
-			target[0] = user;
-		}
-
-		for (let i in target) {
-			let thisUser = target[i];
+		for (let i in this.room.users) {
+			let thisUser = this.room.users[i];
 			if (thisUser.userid in this.voters) {
 				thisUser.sendTo(this.room, '|uhtml|poll' + this.room.pollNumber + '|' + results[this.voters[thisUser.userid]]);
 			} else if (thisUser.latestIp in this.voterIps) {
@@ -132,17 +125,30 @@ let Poll = (function () {
 				thisUser.sendTo(this.room, '|uhtml|poll' + this.room.pollNumber + '|' + votes);
 			}
 		}
-	};
+	}
 
-	Poll.prototype.end = function () {
+	displayTo(user, connection) {
+		if (!connection) connection = user;
+		if (user.userid in this.voters) {
+			connection.sendTo(this.room, '|uhtml|poll' + this.room.pollNumber + '|' + this.generateResults(false, this.voters[user.userid]));
+		} else if (user.latestIp in this.voterIps) {
+			connection.sendTo(this.room, '|uhtml|poll' + this.room.pollNumber + '|' + this.generateResults(false, this.voterIps[user.latestIp]));
+		} else {
+			connection.sendTo(this.room, '|uhtml|poll' + this.room.pollNumber + '|' + this.generateVotes());
+		}
+	}
+
+	onConnect(user, connection) {
+		this.displayTo(user, connection);
+	}
+
+	end() {
 		let results = this.generateResults(true);
 
 		this.room.send('|uhtmlchange|poll' + this.room.pollNumber + '|<div class="infobox">(The poll has ended &ndash; scroll down to see the results)</div>');
-		this.room.send('|html|' + results);
-	};
-
-	return Poll;
-})();
+		this.room.add('|html|' + results);
+	}
+}
 
 exports.commands = {
 	poll: {
@@ -168,7 +174,7 @@ exports.commands = {
 			}
 
 			room.poll = new Poll(room, params[0], options);
-			room.poll.display(user, true);
+			room.poll.display();
 
 			this.logEntry("" + user.name + " used " + message);
 			return this.privateModCommand("(A poll was started by " + user.name + ".)");
@@ -184,7 +190,7 @@ exports.commands = {
 				return;
 			}
 
-			let parsed = parseInt(target, 10);
+			let parsed = parseInt(target);
 			if (isNaN(parsed)) return this.errorReply("To vote, specify the number of the option.");
 
 			if (!room.poll.options.has(parsed)) return this.sendReply("Option not in poll.");
@@ -203,7 +209,7 @@ exports.commands = {
 					clearTimeout(room.poll.timeout);
 					room.poll.timeout = null;
 					room.poll.timeoutMins = 0;
-					return this.add("The timeout for the poll was cleared.");
+					return this.add("The poll timer was turned off.");
 				}
 				let timeout = parseFloat(target);
 				if (isNaN(timeout) || timeout <= 0 || timeout > 0x7FFFFFFF) return this.errorReply("Invalid time given.");
@@ -213,14 +219,14 @@ exports.commands = {
 					room.poll.end();
 					delete room.poll;
 				}), (timeout * 60000));
-				room.add("The timeout for the poll was set to " + timeout + " minutes.");
-				return this.privateModCommand("(The poll timeout was set to " + timeout + " minutes by " + user.name + ".)");
+				room.add("The poll timer was turned on: the poll will end in " + timeout + " minutes.");
+				return this.privateModCommand("(The poll timer was set to " + timeout + " minutes by " + user.name + ".)");
 			} else {
 				if (!this.canBroadcast()) return;
 				if (room.poll.timeout) {
-					return this.sendReply("The timeout for the poll is " + room.poll.timeoutMins + " minutes.");
+					return this.sendReply("The poll timer is on and will end in " + room.poll.timeoutMins + " minutes.");
 				} else {
-					return this.sendReply("There's no timer for this poll.");
+					return this.sendReply("The poll timer is off.");
 				}
 			}
 		},
@@ -248,18 +254,22 @@ exports.commands = {
 		endhelp: ["/poll end - Ends a poll and displays the results. Requires: % @ # & ~"],
 
 		show: 'display',
-		display: function (target, room, user) {
+		display: function (target, room, user, connection) {
 			if (!room.poll) return this.errorReply("There is no poll running in this room.");
 			if (!this.canBroadcast()) return;
 			room.update();
 
-			room.poll.display(user, this.broadcasting);
+			if (this.broadcasting) {
+				room.poll.display();
+			} else {
+				room.poll.displayTo(user, connection);
+			}
 		},
 		displayhelp: ["/poll display - Displays the poll"],
 
 		'': function (target, room, user) {
 			this.parse('/help poll');
-		}
+		},
 	},
 	pollhelp: ["/poll allows rooms to run their own polls. These polls are limited to one poll at a time per room.",
 				"Accepts the following commands:",
@@ -268,5 +278,5 @@ exports.commands = {
 				"/poll timer [minutes] - Sets the poll to automatically end after [minutes]. Requires: % @ # & ~",
 				"/poll results - Shows the results of the poll without voting. NOTE: you can't go back and vote after using this.",
 				"/poll display - Displays the poll",
-				"/poll end - Ends a poll and displays the results. Requires: % @ # & ~"]
+				"/poll end - Ends a poll and displays the results. Requires: % @ # & ~"],
 };

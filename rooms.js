@@ -65,11 +65,24 @@ let Room = (function () {
 	};
 	Room.prototype.add = function (message) {
 		if (typeof message !== 'string') throw new Error("Deprecated message type");
+		if (message.startsWith('|uhtmlchange|')) return this.uhtmlchange(message);
 		this.logEntry(message);
 		if (this.logTimes && message.substr(0, 3) === '|c|') {
 			message = '|c:|' + (~~(Date.now() / 1000)) + '|' + message.substr(3);
 		}
 		this.log.push(message);
+		return this;
+	};
+	Room.prototype.uhtmlchange = function (message) {
+		let thirdPipe = message.indexOf('|', 13);
+		let originalStart = '|uhtml|' + message.slice(13, thirdPipe + 1);
+		for (let i = 0; i < this.log.length; i++) {
+			if (this.log[i].startsWith(originalStart)) {
+				this.log[i] = originalStart + message.slice(thirdPipe + 1);
+				break;
+			}
+		}
+		this.send(message);
 		return this;
 	};
 	Room.prototype.logEntry = function () {};
@@ -121,17 +134,16 @@ let Room = (function () {
 		let alts;
 		if (!noRecurse) {
 			alts = [];
-			for (let i in Users.users) {
-				let otherUser = Users.users[i];
-				if (otherUser === user) continue;
+			Users.users.forEach(function (otherUser) {
+				if (otherUser === user) return;
 				for (let myIp in user.ips) {
 					if (myIp in otherUser.ips) {
 						alts.push(otherUser.name);
 						this.roomBan(otherUser, true, userid);
-						break;
+						return;
 					}
 				}
-			}
+			}, this);
 		}
 		this.bannedUsers[userid] = userid;
 		if (user.autoconfirmed) this.bannedUsers[user.autoconfirmed] = userid;
@@ -232,7 +244,7 @@ let Room = (function () {
 					userid: userid,
 					time: time,
 					guestNum: user.guestNum,
-					autoconfirmed: user.autoconfirmed
+					autoconfirmed: user.autoconfirmed,
 				};
 				this.muteQueue.splice(i, 0, entry);
 				// The timer needs to be switched to the new entry if it is to be unmuted
@@ -256,7 +268,7 @@ let Room = (function () {
 			// If the user is not found, construct a dummy user object for them.
 			user = {
 				userid: userid,
-				autoconfirmed: userid
+				autoconfirmed: userid,
 			};
 		}
 
@@ -298,7 +310,7 @@ let GlobalRoom = (function () {
 		// but this is okay to prevent race conditions as we start up PS
 		this.lastBattle = 0;
 		try {
-			this.lastBattle = parseInt(fs.readFileSync('logs/lastbattle.txt', 'utf8'), 10) || 0;
+			this.lastBattle = parseInt(fs.readFileSync('logs/lastbattle.txt', 'utf8')) || 0;
 		} catch (e) {} // file doesn't exist [yet]
 
 		this.chatRoomData = [];
@@ -311,12 +323,12 @@ let GlobalRoom = (function () {
 			this.chatRoomData = [{
 				title: 'Lobby',
 				isOfficial: true,
-				autojoin: true
+				autojoin: true,
 			}, {
 				title: 'Staff',
 				isPrivate: true,
 				staffRoom: true,
-				staffAutojoin: true
+				staffAutojoin: true,
 			}];
 		}
 
@@ -430,13 +442,13 @@ let GlobalRoom = (function () {
 		if (this.maxUsersDate) {
 			LoginServer.request('updateuserstats', {
 				date: this.maxUsersDate,
-				users: this.maxUsers
+				users: this.maxUsers,
 			}, function () {});
 			this.maxUsersDate = 0;
 		}
 		LoginServer.request('updateuserstats', {
 			date: Date.now(),
-			users: this.userCount
+			users: this.userCount,
 		}, function () {});
 	};
 
@@ -499,7 +511,7 @@ let GlobalRoom = (function () {
 			(room.isOfficial ? roomsData.official : roomsData.chat).push({
 				title: room.title,
 				desc: room.desc,
-				userCount: room.userCount
+				userCount: room.userCount,
 			});
 		}
 		return roomsData;
@@ -522,7 +534,7 @@ let GlobalRoom = (function () {
 			}
 		}
 
-		user.send('|updatesearch|' + JSON.stringify({searching: Object.keys(user.searching)}));
+		user.updateSearch();
 		return true;
 	};
 	GlobalRoom.prototype.searchBattle = function (user, formatid) {
@@ -535,14 +547,11 @@ let GlobalRoom = (function () {
 	GlobalRoom.prototype.finishSearchBattle = function (user, formatid, result) {
 		if (!result) return;
 
-		// tell the user they've started searching
-		user.send('|updatesearch|' + JSON.stringify({searching: Object.keys(user.searching).concat(formatid)}));
-
 		let newSearch = {
 			userid: '',
 			team: user.team,
 			rating: 1000,
-			time: new Date().getTime()
+			time: new Date().getTime(),
 		};
 		let self = this;
 
@@ -593,12 +602,8 @@ let GlobalRoom = (function () {
 			let search = formatSearches[i];
 			let searchUser = Users.getExact(search.userid);
 			if (this.matchmakingOK(search, newSearch, searchUser, user, formatid)) {
-				let usersToUpdate = [user, searchUser];
-				for (let j = 0; j < 2; j++) {
-					delete usersToUpdate[j].searching[formatid];
-					let searchedFormats = Object.keys(usersToUpdate[j].searching);
-					usersToUpdate[j].send('|updatesearch|' + JSON.stringify({searching: searchedFormats}));
-				}
+				delete user.searching[formatid];
+				delete searchUser.searching[formatid];
 				formatSearches.splice(i, 1);
 				this.startBattle(searchUser, user, formatid, search.team, newSearch.team, {rated: true});
 				return;
@@ -606,6 +611,7 @@ let GlobalRoom = (function () {
 		}
 		user.searching[formatid] = 1;
 		formatSearches.push(newSearch);
+		user.updateSearch();
 	};
 	GlobalRoom.prototype.periodicMatch = function () {
 		for (let formatid in this.searches) {
@@ -620,12 +626,8 @@ let GlobalRoom = (function () {
 				let search = formatSearches[i];
 				let searchUser = Users.getExact(search.userid);
 				if (this.matchmakingOK(search, longestSearch, searchUser, longestSearcher, formatid)) {
-					let usersToUpdate = [longestSearcher, searchUser];
-					for (let j = 0; j < 2; j++) {
-						delete usersToUpdate[j].searching[formatid];
-						let searchedFormats = Object.keys(usersToUpdate[j].searching);
-						usersToUpdate[j].send('|updatesearch|' + JSON.stringify({searching: searchedFormats}));
-					}
+					delete longestSearcher.searching[formatid];
+					delete searchUser.searching[formatid];
 					formatSearches.splice(i, 1);
 					formatSearches.splice(0, 1);
 					this.startBattle(searchUser, longestSearcher, formatid, search.team, longestSearch.team, {rated: true});
@@ -662,7 +664,7 @@ let GlobalRoom = (function () {
 		if (rooms[id]) return false;
 
 		let chatRoomData = {
-			title: title
+			title: title,
 		};
 		let room = Rooms.createChatRoom(id, title, chatRoomData);
 		this.chatRoomData.push(chatRoomData);
@@ -716,7 +718,7 @@ let GlobalRoom = (function () {
 	GlobalRoom.prototype.checkAutojoin = function (user, connection) {
 		if (!user.named) return;
 		for (let i = 0; i < this.staffAutojoin.length; i++) {
-			let room = Rooms.get(this.staffAutojoin[i]);
+			let room = Rooms(this.staffAutojoin[i]);
 			if (!room) {
 				this.staffAutojoin.splice(i, 1);
 				i--;
@@ -745,7 +747,7 @@ let GlobalRoom = (function () {
 		connection.send(initdata + this.formatListText);
 		if (this.chatRooms.length > 2) connection.send('|queryresponse|rooms|null'); // should display room list
 	};
-	GlobalRoom.prototype.onJoin = function (user, connection, merging) {
+	GlobalRoom.prototype.onJoin = function (user, connection) {
 		if (!user) return false; // ???
 		if (this.users[user.userid]) return user;
 
@@ -861,7 +863,7 @@ let BattleRoom = (function () {
 			rated = {
 				p1: p1.userid,
 				p2: p2.userid,
-				format: format
+				format: format,
 			};
 		} else {
 			rated = false;
@@ -872,7 +874,7 @@ let BattleRoom = (function () {
 				p1: p1.userid,
 				p2: p2.userid,
 				format: format,
-				tour: options.tour
+				tour: options.tour,
 			};
 		} else {
 			this.tour = false;
@@ -985,7 +987,7 @@ let BattleRoom = (function () {
 	BattleRoom.prototype.getLogForUser = function (user) {
 		if (this.game.ended) return this.getLog(3);
 		if (!(user in this.game.players)) return this.getLog(0);
-		return this.getLog(this.game.players[user].slotNum);
+		return this.getLog(this.game.players[user].slotNum + 1);
 	};
 	BattleRoom.prototype.update = function (excludeUser) {
 		if (this.log.length <= this.lastUpdate) return;
@@ -1036,8 +1038,10 @@ let BattleRoom = (function () {
 		this.expire();
 	};
 	BattleRoom.prototype.getInactiveSide = function () {
-		if (this.battle.p1 && !this.battle.p2) return 1;
-		if (this.battle.p2 && !this.battle.p1) return 0;
+		let p1active = this.battle.p1 && this.battle.p1.active;
+		let p2active = this.battle.p2 && this.battle.p2.active;
+		if (p1active && !p2active) return 1;
+		if (p2active && !p1active) return 0;
 		return this.battle.inactiveSide;
 	};
 	BattleRoom.prototype.forfeit = function (user, message, side) {
@@ -1150,7 +1154,7 @@ let BattleRoom = (function () {
 		// a tick is 10 seconds
 
 		let maxTicksLeft = 15; // 2 minutes 30 seconds
-		if (!this.battle.p1 || !this.battle.p2) {
+		if (!this.battle.p1 || !this.battle.p2 || !this.battle.p1.active || !this.battle.p2.active) {
 			// if a player has left, don't wait longer than 6 ticks (1 minute)
 			maxTicksLeft = 6;
 		}
@@ -1199,20 +1203,24 @@ let BattleRoom = (function () {
 		return false;
 	};
 	BattleRoom.prototype.kickInactiveUpdate = function () {
-		if (!this.rated && !this.tour) return false;
+		if (this.battle.allowRenames) return false;
+
+		let p1inactive = !this.battle.p1 || !this.battle.p1.active;
+		let p2inactive = !this.battle.p2 || !this.battle.p2.active;
+
 		if (this.resetTimer) {
 			let inactiveSide = this.getInactiveSide();
 			let changed = false;
 
-			if ((!this.battle.p1 || !this.battle.p2) && !this.disconnectTickDiff[0] && !this.disconnectTickDiff[1]) {
-				if ((!this.battle.p1 && inactiveSide === 0) || (!this.battle.p2 && inactiveSide === 1)) {
+			if ((p1inactive || p2inactive) && !this.disconnectTickDiff[0] && !this.disconnectTickDiff[1]) {
+				if ((p1inactive && inactiveSide === 0) || (p2inactive && inactiveSide === 1)) {
 					let inactiveUser = this.getPlayer(inactiveSide);
 
-					if (!this.battle.p1 && inactiveSide === 0 && this.sideTurnTicks[0] > 7) {
+					if (p1inactive && inactiveSide === 0 && this.sideTurnTicks[0] > 7) {
 						this.disconnectTickDiff[0] = this.sideTurnTicks[0] - 7;
 						this.sideTurnTicks[0] = 7;
 						changed = true;
-					} else if (!this.battle.p2 && inactiveSide === 1 && this.sideTurnTicks[1] > 7) {
+					} else if (p2inactive && inactiveSide === 1 && this.sideTurnTicks[1] > 7) {
 						this.disconnectTickDiff[1] = this.sideTurnTicks[1] - 7;
 						this.sideTurnTicks[1] = 7;
 						changed = true;
@@ -1223,7 +1231,7 @@ let BattleRoom = (function () {
 						return true;
 					}
 				}
-			} else if (this.battle.p1 && this.battle.p2) {
+			} else if (!p1inactive && !p2inactive) {
 				// Only one of the following conditions should happen, but do
 				// them both since you never know...
 				if (this.disconnectTickDiff[0]) {
@@ -1364,7 +1372,7 @@ let BattleRoom = (function () {
 
 		// remove references to ourself
 		for (let i in this.users) {
-			this.users[i].leaveRoom(this);
+			this.users[i].leaveRoom(this, null, true);
 			delete this.users[i];
 		}
 		this.users = null;
@@ -1595,7 +1603,7 @@ let ChatRoom = (function () {
 	ChatRoom.prototype.onConnect = function (user, connection) {
 		let userList = this.userList ? this.userList : this.getUserList();
 		this.sendUser(connection, '|init|chat\n|title|' + this.title + '\n' + userList + '\n' + this.getLogSlice(-100).join('\n') + this.getIntroMessage(user));
-		if (this.poll) this.poll.display(user, false);
+		if (this.poll) this.poll.onConnect(user, connection);
 		if (this.game && this.game.onConnect) this.game.onConnect(user, connection);
 	};
 	ChatRoom.prototype.onJoin = function (user, connection) {
@@ -1654,7 +1662,7 @@ let ChatRoom = (function () {
 
 		// remove references to ourself
 		for (let i in this.users) {
-			this.users[i].leaveRoom(this);
+			this.users[i].leaveRoom(this, null, true);
 			delete this.users[i];
 		}
 		this.users = null;
@@ -1673,6 +1681,10 @@ let ChatRoom = (function () {
 			clearTimeout(this.muteTimer);
 		}
 		this.muteTimer = null;
+		if (this.expireTimer) {
+			clearTimeout(this.expireTimer);
+		}
+		this.expireTimer = null;
 		if (this.reportJoinsInterval) {
 			clearInterval(this.reportJoinsInterval);
 		}

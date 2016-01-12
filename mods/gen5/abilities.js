@@ -10,11 +10,11 @@ exports.BattleAbilities = {
 			if (target && target.item) {
 				this.add('-item', target, target.getItem().name, '[from] ability: Frisk', '[of] ' + pokemon);
 			}
-		}
+		},
 	},
 	"keeneye": {
 		inherit: true,
-		onModifyMove: function () {}
+		onModifyMove: function () {},
 	},
 	"oblivious": {
 		inherit: true,
@@ -31,16 +31,16 @@ exports.BattleAbilities = {
 				this.add('-immune', pokemon, '[msg]', '[from] Oblivious');
 				return null;
 			}
-		}
+		},
 	},
 	"overcoat": {
 		inherit: true,
-		onTryHit: function () {}
+		onTryHit: function () {},
 	},
 	"sapsipper": {
 		inherit: true,
 		desc: "This Pokemon is immune to Grass moves. If hit by a Grass move, its Attack is increased by one stage (once for each hit of Bullet Seed). Does not affect Aromatherapy.",
-		onAllyTryHitSide: function () {}
+		onAllyTryHitSide: function () {},
 	},
 	"serenegrace": {
 		inherit: true,
@@ -51,6 +51,11 @@ exports.BattleAbilities = {
 					move.secondaries[i].chance *= 2;
 				}
 			}
-		}
-	}
+		},
+	},
+	"soundproof": {
+		inherit: true,
+		shortDesc: "This Pokemon is immune to sound-based moves, except Heal Bell.",
+		onAllyTryHitSide: function () {},
+	},
 };

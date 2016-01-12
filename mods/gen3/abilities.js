@@ -9,7 +9,7 @@ exports.BattleAbilities = {
 					source.addVolatile('attract', target);
 				}
 			}
-		}
+		},
 	},
 	"effectspore": {
 		inherit: true,
@@ -24,7 +24,7 @@ exports.BattleAbilities = {
 					source.setStatus('psn');
 				}
 			}
-		}
+		},
 	},
 	"flamebody": {
 		inherit: true,
@@ -34,7 +34,7 @@ exports.BattleAbilities = {
 					source.trySetStatus('brn', target, move);
 				}
 			}
-		}
+		},
 	},
 	"flashfire": {
 		inherit: true,
@@ -48,12 +48,11 @@ exports.BattleAbilities = {
 				}
 				return null;
 			}
-		}
+		},
 	},
 	"lightningrod": {
 		desc: "During double battles, this Pokemon draws any single-target Electric-type attack to itself. If an opponent uses an Electric-type attack that affects multiple Pokemon, those targets will be hit. This ability does not affect Electric Hidden Power or Judgment.",
 		shortDesc: "This Pokemon draws opposing Electric moves to itself.",
-		onFoeRedirectTargetPriority: 1,
 		onFoeRedirectTarget: function (target, source, source2, move) {
 			if (move.type !== 'Electric') return;
 			if (this.validTarget(this.effectData.target, source, move.target)) {
@@ -63,13 +62,13 @@ exports.BattleAbilities = {
 		id: "lightningrod",
 		name: "Lightning Rod",
 		rating: 3.5,
-		num: 32
+		num: 32,
 	},
 	"pickup": {
 		inherit: true,
 		onResidualOrder: null,
 		onResidualSubOrder: null,
-		onResidual: function () {}
+		onResidual: function () {},
 	},
 	"poisonpoint": {
 		inherit: true,
@@ -79,11 +78,11 @@ exports.BattleAbilities = {
 					source.trySetStatus('psn', target, move);
 				}
 			}
-		}
+		},
 	},
 	"pressure": {
 		inherit: true,
-		onStart: function () { }
+		onStart: function () { },
 	},
 	"roughskin": {
 		inherit: true,
@@ -91,7 +90,7 @@ exports.BattleAbilities = {
 			if (source && source !== target && move && move.flags['contact']) {
 				this.damage(source.maxhp / 16, source, target);
 			}
-		}
+		},
 	},
 	"serenegrace": {
 		inherit: true,
@@ -102,13 +101,13 @@ exports.BattleAbilities = {
 					move.secondaries[i].chance *= 2;
 				}
 			}
-		}
+		},
 	},
 	"shadowtag": {
 		inherit: true,
-		onFoeModifyPokemon: function (pokemon) {
+		onFoeTrapPokemon: function (pokemon) {
 			pokemon.trapped = true;
-		}
+		},
 	},
 	"static": {
 		inherit: true,
@@ -118,15 +117,15 @@ exports.BattleAbilities = {
 					source.trySetStatus('par', target, effect);
 				}
 			}
-		}
+		},
 	},
 	"stench": {
 		inherit: true,
-		onModifyMove: function () {}
+		onModifyMove: function () {},
 	},
 	"sturdy": {
 		inherit: true,
-		onDamage: function () {}
+		onDamage: function () {},
 	},
 	"synchronize": {
 		inherit: true,
@@ -136,7 +135,7 @@ exports.BattleAbilities = {
 			if (id === 'slp' || id === 'frz') return;
 			if (id === 'tox') id = 'psn';
 			source.trySetStatus(id);
-		}
+		},
 	},
 	"trace": {
 		inherit: true,
@@ -151,7 +150,7 @@ exports.BattleAbilities = {
 			if (pokemon.setAbility(ability)) {
 				this.add('-ability', pokemon, ability, '[from] ability: Trace', '[of] ' + target);
 			}
-		}
+		},
 	},
 	"voltabsorb": {
 		inherit: true,
@@ -162,6 +161,6 @@ exports.BattleAbilities = {
 				}
 				return null;
 			}
-		}
-	}
+		},
+	},
 };

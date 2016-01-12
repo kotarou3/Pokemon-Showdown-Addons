@@ -62,7 +62,7 @@ fs.readdirSync(path.resolve(__dirname, 'chat-plugins')).forEach(function (file) 
 
 let modlog = exports.modlog = {
 	lobby: fs.createWriteStream(path.resolve(__dirname, 'logs/modlog/modlog_lobby.txt'), {flags:'a+'}),
-	battle: fs.createWriteStream(path.resolve(__dirname, 'logs/modlog/modlog_battle.txt'), {flags:'a+'})
+	battle: fs.createWriteStream(path.resolve(__dirname, 'logs/modlog/modlog_battle.txt'), {flags:'a+'}),
 };
 
 let writeModlog = exports.writeModlog = function (roomid, text) {
@@ -110,7 +110,7 @@ function canTalk(user, room, connection, message, targetUser) {
 					return false;
 				}
 			} else if (Config.groups.bySymbol[userGroup].rank < Config.groups.bySymbol[room.modchat].rank && !user.can('makeroom')) {
-				let groupName = Config.groups[room.modchat].name || room.modchat;
+				let groupName = Config.groups.bySymbol[room.modchat].name || room.modchat;
 				this.errorReply("Because moderated chat is set, you must be of rank " + groupName + " or higher to speak in this room.");
 				return false;
 			}
@@ -132,7 +132,11 @@ function canTalk(user, room, connection, message, targetUser) {
 		}
 
 		// remove zalgo
-		message = message.replace(/[\u0300-\u036f\u0483-\u0489\u064b-\u065f\u0670\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]{3,}/g, '');
+		message = message.replace(/[\u0300-\u036f\u0483-\u0489\u0610-\u0615\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06ED\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]{3,}/g, '');
+		if (/[\u239b-\u23b9]/.test(message)) {
+			this.errorReply("Your message contains banned characters.");
+			return false;
+		}
 
 		if (room && room.id === 'lobby') {
 			let normalized = message.trim();
@@ -317,11 +321,63 @@ let Context = exports.Context = (function () {
 		let innerRoom = (relevantRoom !== undefined) ? relevantRoom : this.room;
 		return canTalk.call(this, this.user, innerRoom, this.connection, message, targetUser);
 	};
+	Context.prototype.canEmbedURI = function (uri, isRelative) {
+		if (uri.startsWith('https://')) return uri;
+		if (uri.startsWith('//')) return uri;
+		if (uri.startsWith('data:')) return uri;
+		if (!uri.startsWith('http://')) {
+			if (/^[a-z]+\:\/\//.test(uri) || isRelative) {
+				return this.errorReply("URIs must begin with 'https://' or 'http://' or 'data:'");
+			}
+		} else {
+			uri = uri.slice(7);
+		}
+		let slashIndex = uri.indexOf('/');
+		let domain = (slashIndex >= 0 ? uri.slice(0, slashIndex) : uri);
+
+		// heuristic that works for all the domains we care about
+		let secondLastDotIndex = domain.lastIndexOf('.', domain.length - 5);
+		if (secondLastDotIndex >= 0) domain = domain.slice(secondLastDotIndex + 1);
+
+		let approvedDomains = {
+			'imgur.com': 1,
+			'gyazo.com': 1,
+			'puu.sh': 1,
+			'rotmgtool.com': 1,
+			'pokemonshowdown.com': 1,
+			'nocookie.net': 1,
+			'blogspot.com': 1,
+			'imageshack.us': 1,
+			'deviantart.net': 1,
+			'd.pr': 1,
+			'pokefans.net': 1,
+		};
+		if (domain in approvedDomains) {
+			return '//' + uri;
+		}
+		if (domain === 'bit.ly') {
+			return this.errorReply("Please don't use URL shorteners.");
+		}
+		// unknown URI, allow HTTP to be safe
+		return 'http://' + uri;
+	};
 	Context.prototype.canHTML = function (html) {
 		html = '' + (html || '');
-		if (html.match(/<img\b[^<>]*/ig) && this.room.isPersonal && !this.user.can('announce')) {
-			this.errorReply("Images are not allowed in personal rooms.");
-			return false;
+		let images = /<img\b[^<>]*/ig;
+		let match;
+		while ((match = images.exec(html))) {
+			if (this.room.isPersonal && !this.user.can('announce')) {
+				this.errorReply("Images are not allowed in personal rooms.");
+				return false;
+			}
+			let srcMatch = /src\s*\=\s*"?([^ "]+)(\s*")?/i.exec(match[0]);
+			if (srcMatch) {
+				let uri = this.canEmbedURI(srcMatch[1], true);
+				if (!uri) return false;
+				html = html.slice(0, match.index + srcMatch.index) + 'src="' + uri + '"' + html.slice(match.index + srcMatch.index + srcMatch[0].length);
+				// lastIndex is inaccurate since html was changed
+				images.lastIndex = match.index + 11;
+			}
 		}
 		if (/>here.?</i.test(html) || /click here/i.test(html)) {
 			this.errorReply('Do not use "click here"');
@@ -353,7 +409,7 @@ let Context = exports.Context = (function () {
 			}
 		}
 
-		return true;
+		return html;
 	};
 	Context.prototype.targetUserOrSelf = function (target, exactName) {
 		if (!target) {
@@ -480,7 +536,7 @@ let parse = exports.parse = function (message, room, user, connection, levelsDee
 
 	let context = new Context({
 		target: target, room: room, user: user, connection: connection, cmd: cmd, message: message,
-		namespaces: namespaces, cmdToken: cmdToken, levelsDeep: levelsDeep
+		namespaces: namespaces, cmdToken: cmdToken, levelsDeep: levelsDeep,
 	});
 
 	if (commandHandler) {

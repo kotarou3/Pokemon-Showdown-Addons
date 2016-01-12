@@ -15,7 +15,7 @@ exports.BattleScripts = {
 				this.typesData.push({
 					type: this.types[i],
 					suppressed: false,
-					isAdded: false
+					isAdded: false,
 				});
 			}
 			if (!dontRecalculateStats) {
@@ -29,7 +29,7 @@ exports.BattleScripts = {
 					'PU': 20,
 					'NFE': 20,
 					'LC Uber': 20,
-					'LC': 20
+					'LC': 20,
 				};
 				let tier = template.tier;
 				if (this.set.item) {
@@ -38,7 +38,7 @@ exports.BattleScripts = {
 				}
 				if (tier.charAt(0) === '(') tier = tier.slice(1, -1);
 				let boost = (tier in boosts) ? boosts[tier] : 0;
-				if (this.set.ability in {'Drizzle': 1, 'Drought': 1, 'Shadow Tag': 1}) {
+				if (this.set.ability in {'Drizzle': 1, 'Drought': 1}) {
 					boost = 0;
 				} else if (this.set.moves.indexOf('chatter') >= 0) {
 					boost = 15;
@@ -60,6 +60,6 @@ exports.BattleScripts = {
 				this.speed = this.stats.spe;
 			}
 			return true;
-		}
-	}
+		},
+	},
 };
