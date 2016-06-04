@@ -1,6 +1,8 @@
 'use strict';
 
 exports.commands = {
+	rk: 'kick',
+	roomkick: 'kick',
 	k: 'kick',
 	kick: function (target, room, user) {
 		if (!target) return;
