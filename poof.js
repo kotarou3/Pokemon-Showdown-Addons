@@ -1,7 +1,7 @@
 'use strict';
 
 const messages = [
-	"didn't get a cool message because none have been added!"
+	"didn't get a cool message because none have been added!",
 ];
 
 exports.commands = {
@@ -38,5 +38,5 @@ exports.commands = {
 		if (!this.can('poofoff')) return false;
 		Config.poofOff = false;
 		return this.sendReply("Poof is now enabled.");
-	}
+	},
 };

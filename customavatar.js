@@ -72,8 +72,9 @@ exports.commands = {
 
 		if (cmd in {'':1, show:1, view:1, display:1}) {
 			let message = "";
-			for (let a in Config.customAvatars)
+			for (let a in Config.customAvatars) {
 				message += "<strong>" + Tools.escapeHTML(a) + ":</strong> " + Tools.escapeHTML(Config.customAvatars[a]) + "<br />";
+			}
 			return this.sendReplyBox(message);
 		}
 
@@ -148,5 +149,5 @@ exports.commands = {
 		default:
 			return this.sendReply("Invalid command. Valid commands are `/customavatar set, user, avatar` and `/customavatar delete, user`.");
 		}
-	}
+	},
 };

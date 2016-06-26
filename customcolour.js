@@ -8,5 +8,5 @@ exports.commands = {
 		if (!this.can('customcolour', room) || !this.canBroadcast('!cc')) return false;
 
 		this.sendReply('|raw|<font color="' + targets[0].toLowerCase().replace(/[^#a-z0-9]+/g, '') + '">' + Tools.escapeHTML(targets.slice(1).join(",")) + '</font>');
-	}
+	},
 };
